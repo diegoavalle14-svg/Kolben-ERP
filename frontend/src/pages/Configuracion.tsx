@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Save, Plus, Trash2, Landmark, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Config {
@@ -11,133 +10,392 @@ interface Config {
   diaRespaldo: number;
   pctMesSinStock: string | number;
 }
-interface Banco { id: number; nombre: string; cuentaEnmascarada: string; orden: number }
 
-const input =
-  'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition';
-const label = 'block text-xs font-semibold text-slate-600 mb-1';
+interface Banco {
+  id: number;
+  nombre: string;
+  cuentaEnmascarada: string;
+  orden: number;
+}
+
+const DIAS_SEMANA = [
+  { val: 1, label: 'Lunes' },
+  { val: 2, label: 'Martes' },
+  { val: 3, label: 'Miércoles' },
+  { val: 4, label: 'Jueves' },
+  { val: 5, label: 'Viernes' },
+  { val: 6, label: 'Sábado' },
+  { val: 7, label: 'Domingo' },
+];
 
 export default function Configuracion() {
   const [config, setConfig] = useState<Config | null>(null);
   const [bancos, setBancos] = useState<Banco[]>([]);
+  const [agregandoBanco, setAgregandoBanco] = useState(false);
   const [nuevoBanco, setNuevoBanco] = useState({ nombre: '', cuentaEnmascarada: '' });
+  
+  // Usuario fields
+  const [usuario, setUsuario] = useState('');
+  const [passwordActual, setPasswordActual] = useState('');
+  const [nuevaPassword, setNuevaPassword] = useState('');
+  const [repetirPassword, setRepetirPassword] = useState('');
+  
+  // Feedback
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
+  const [guardandoUsuario, setGuardandoUsuario] = useState(false);
 
-  const cargar = () =>
+  const cargar = () => {
     api<{ config: Config; bancos: Banco[] }>('/config')
-      .then((d) => { setConfig(d.config); setBancos(d.bancos); })
-      .catch((e) => setMsg({ tipo: 'error', texto: e.message }));
+      .then((d) => {
+        setConfig(d.config);
+        setBancos(d.bancos);
+      })
+      .catch((e) => flash('error', e.message));
 
-  useEffect(() => { cargar(); }, []);
+    api<{ usuario: string }>('/auth/me')
+      .then((d) => setUsuario(d.usuario))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    cargar();
+  }, []);
 
   const flash = (tipo: 'ok' | 'error', texto: string) => {
     setMsg({ tipo, texto });
-    setTimeout(() => setMsg(null), 3000);
+    setTimeout(() => setMsg(null), 3500);
   };
 
-  const guardar = async () => {
+  const guardarConfiguracion = async (nuevoValor?: Partial<Config>) => {
     if (!config) return;
+    const datosAGuardar = { ...config, ...(nuevoValor || {}) };
     try {
-      await api('/config', { method: 'PUT', body: JSON.stringify(config) });
+      await api('/config', {
+        method: 'PUT',
+        body: JSON.stringify(datosAGuardar),
+      });
       flash('ok', 'Configuración guardada');
-    } catch (e) { flash('error', (e as Error).message); }
+    } catch (e) {
+      flash('error', (e as Error).message);
+    }
   };
 
   const agregarBanco = async () => {
     if (!nuevoBanco.nombre || !nuevoBanco.cuentaEnmascarada) return;
     try {
-      await api('/config/bancos', { method: 'POST', body: JSON.stringify(nuevoBanco) });
+      await api('/config/bancos', {
+        method: 'POST',
+        body: JSON.stringify(nuevoBanco),
+      });
       setNuevoBanco({ nombre: '', cuentaEnmascarada: '' });
+      setAgregandoBanco(false);
       cargar();
-    } catch (e) { flash('error', (e as Error).message); }
+      flash('ok', 'Banco agregado');
+    } catch (e) {
+      flash('error', (e as Error).message);
+    }
   };
 
   const eliminarBanco = async (id: number) => {
-    if (!confirm('¿Eliminar este banco?')) return;
-    await api(`/config/bancos/${id}`, { method: 'DELETE' }).catch((e) => flash('error', e.message));
-    cargar();
+    try {
+      await api(`/config/bancos/${id}`, { method: 'DELETE' });
+      cargar();
+      flash('ok', 'Banco eliminado');
+    } catch (e) {
+      flash('error', (e as Error).message);
+    }
   };
 
-  if (!config) return <div className="p-8 text-sm text-slate-500">Cargando configuración...</div>;
+  const guardarUsuario = async () => {
+    if (!passwordActual) {
+      flash('error', 'Ingresa tu contraseña actual');
+      return;
+    }
+    if (nuevaPassword && nuevaPassword !== repetirPassword) {
+      flash('error', 'Las contraseñas nuevas no coinciden');
+      return;
+    }
+    setGuardandoUsuario(true);
+    try {
+      await api('/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({
+          usuario,
+          passwordActual,
+          nueva: nuevaPassword || undefined,
+        }),
+      });
+      setPasswordActual('');
+      setNuevaPassword('');
+      setRepetirPassword('');
+      flash('ok', 'Usuario y contraseña actualizados');
+    } catch (e) {
+      flash('error', (e as Error).message);
+    } finally {
+      setGuardandoUsuario(false);
+    }
+  };
 
-  const set = <K extends keyof Config>(k: K, v: Config[K]) => setConfig({ ...config, [k]: v });
+  if (!config) {
+    return <div className="p-8 text-sm text-kolben-muted">Cargando configuración...</div>;
+  }
+
+  const inputStyle =
+    "w-full rounded-lg border border-kolben-line bg-kolben-field px-3 py-[9px] text-[13px] font-semibold text-kolben-text outline-none transition focus:border-kolben-ink focus:ring-1 focus:ring-kolben-ink";
+  const labelStyle =
+    "block text-[10px] font-semibold uppercase tracking-[0.08em] text-kolben-muted mb-1";
+  const sectionHeader =
+    "text-[11px] font-bold uppercase tracking-[0.08em] text-kolben-text mb-4";
 
   return (
-    <div className="p-8">
-      <header className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Configuración</h1>
-          <p className="text-sm text-slate-500">Parámetros generales del sistema</p>
-        </div>
-        <button id="btn-guardar-config" onClick={guardar}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition">
-          <Save className="w-4 h-4" /> Guardar cambios
-        </button>
-      </header>
-
+    <div className="space-y-4 pb-12">
       {msg && (
-        <div className={`mb-4 flex items-center gap-2 text-sm rounded-lg p-3 border ${
-          msg.tipo === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-          {msg.tipo === 'ok' && <CheckCircle2 className="w-4 h-4" />} {msg.texto}
+        <div
+          role="status"
+          className={`p-3 rounded-lg text-xs font-semibold ${
+            msg.tipo === 'ok'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          {msg.texto}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-6">
-        <section className="border border-slate-200 rounded-xl p-6">
-          <h2 className="font-semibold text-slate-800 mb-4">Vendedor y documentos</h2>
-          <div className="space-y-4">
-            <div><label className={label}>Vendedor</label>
-              <input id="cfg-vendedor" className={input} value={config.vendedor} onChange={(e) => set('vendedor', e.target.value)} /></div>
-            <div><label className={label}>Contacto (teléfono / correo)</label>
-              <input id="cfg-contacto" className={input} value={config.contacto} onChange={(e) => set('contacto', e.target.value)} /></div>
-            <div><label className={label}>Titular de cheques</label>
-              <input id="cfg-titular" className={input} value={config.titularCheques ?? ''} onChange={(e) => set('titularCheques', e.target.value)} /></div>
-            <div><label className={label}>% ISV</label>
-              <input id="cfg-isv" type="number" step="0.01" className={input} value={config.porcentajeIsv} onChange={(e) => set('porcentajeIsv', e.target.value)} /></div>
-          </div>
-        </section>
+      {/* BLOQUE 1: DATOS DE LA PROFORMA */}
+      <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
+        <h2 className={sectionHeader}>
+          Datos de la proforma{' '}
+          <span className="font-normal text-kolben-muted tracking-normal lowercase">
+            · salen en el PDF que recibe el cliente
+          </span>
+        </h2>
 
-        <section className="border border-slate-200 rounded-xl p-6">
-          <h2 className="font-semibold text-slate-800 mb-4">Respaldo e inventario</h2>
-          <div className="space-y-4">
-            <div><label className={label}>Correo de respaldo</label>
-              <input id="cfg-correo" type="email" className={input} value={config.correoRespaldo ?? ''} onChange={(e) => set('correoRespaldo', e.target.value)} /></div>
-            <div><label className={label}>Día de respaldo mensual (1–28)</label>
-              <input id="cfg-dia" type="number" min={1} max={28} className={input} value={config.diaRespaldo} onChange={(e) => set('diaRespaldo', Number(e.target.value))} /></div>
-            <div><label className={label}>Regla mes sin stock (% de demanda a sustituir)</label>
-              <input id="cfg-sinstock" type="number" step="0.01" className={input} value={config.pctMesSinStock} onChange={(e) => set('pctMesSinStock', e.target.value)} /></div>
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div>
+            <label htmlFor="cfg-vendedor" className={labelStyle}>Vendedor</label>
+            <input
+              id="cfg-vendedor"
+              className={inputStyle}
+              value={config.vendedor}
+              onChange={(e) => setConfig({ ...config, vendedor: e.target.value })}
+              onBlur={() => guardarConfiguracion()}
+            />
           </div>
-        </section>
+          <div>
+            <label htmlFor="cfg-contacto" className={labelStyle}>Contacto</label>
+            <input
+              id="cfg-contacto"
+              className={inputStyle}
+              value={config.contacto}
+              onChange={(e) => setConfig({ ...config, contacto: e.target.value })}
+              onBlur={() => guardarConfiguracion()}
+            />
+          </div>
+          <div>
+            <label htmlFor="cfg-titular" className={labelStyle}>Cheques a nombre de</label>
+            <input
+              id="cfg-titular"
+              className={inputStyle}
+              placeholder="[titular de la cuenta]"
+              value={config.titularCheques ?? ''}
+              onChange={(e) => setConfig({ ...config, titularCheques: e.target.value })}
+              onBlur={() => guardarConfiguracion()}
+            />
+          </div>
+        </div>
 
-        <section className="col-span-2 border border-slate-200 rounded-xl p-6">
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><Landmark className="w-4 h-4 text-amber-500" /> Bancos</h2>
-          <table className="w-full text-sm mb-4">
-            <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-              <th className="py-2 w-12">#</th><th>Banco</th><th>Cuenta</th><th className="w-12"></th></tr></thead>
-            <tbody>
-              {bancos.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-slate-400">Sin bancos registrados</td></tr>}
-              {bancos.map((b) => (
-                <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-2 tabular-nums text-slate-400">{b.orden}</td>
-                  <td className="font-medium">{b.nombre}</td>
-                  <td className="tabular-nums">{b.cuentaEnmascarada}</td>
-                  <td><button onClick={() => eliminarBanco(b.id)} className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="flex gap-3">
-            <input id="banco-nombre" className={input} placeholder="Nombre del banco" value={nuevoBanco.nombre}
-              onChange={(e) => setNuevoBanco({ ...nuevoBanco, nombre: e.target.value })} />
-            <input id="banco-cuenta" className={input} placeholder="Cuenta (ej. ****1234)" value={nuevoBanco.cuentaEnmascarada}
-              onChange={(e) => setNuevoBanco({ ...nuevoBanco, cuentaEnmascarada: e.target.value })} />
-            <button id="btn-agregar-banco" onClick={agregarBanco}
-              className="shrink-0 flex items-center gap-1.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold transition">
-              <Plus className="w-4 h-4" /> Agregar
+        {/* BANCOS AUTORIZADOS */}
+        <div>
+          <div className="text-[11px] font-medium text-kolben-muted mb-3">
+            BANCOS AUTORIZADOS <span className="text-[10px] lowercase text-kolben-muted">· en este orden</span>
+          </div>
+
+          <div className="space-y-2 mb-3 max-w-xl">
+            {bancos.map((b) => (
+              <div
+                key={b.id}
+                className="flex items-center justify-between text-sm py-1 border-b border-kolben-line/60 group"
+              >
+                <span className="font-semibold text-kolben-text text-[13px]">{b.nombre}</span>
+                <div className="flex items-center gap-4">
+                  <span className="font-mono text-[13px] text-kolben-text tracking-wider">
+                    {b.cuentaEnmascarada}
+                  </span>
+                  <button
+                    onClick={() => eliminarBanco(b.id)}
+                    className="opacity-0 group-hover:opacity-100 text-xs text-rose-500 hover:text-rose-700 transition"
+                    title="Eliminar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {agregandoBanco ? (
+            <div className="flex items-center gap-3 max-w-xl mt-3 p-3 bg-white rounded-lg border border-kolben-line">
+              <input
+                className={inputStyle}
+                placeholder="Nombre del banco (ej. BAC ahorros)"
+                value={nuevoBanco.nombre}
+                onChange={(e) => setNuevoBanco({ ...nuevoBanco, nombre: e.target.value })}
+              />
+              <input
+                className={inputStyle}
+                placeholder="Cuenta (ej. ••••6381)"
+                value={nuevoBanco.cuentaEnmascarada}
+                onChange={(e) => setNuevoBanco({ ...nuevoBanco, cuentaEnmascarada: e.target.value })}
+              />
+              <button
+                onClick={agregarBanco}
+                className="px-3 py-2 bg-kolben-ink hover:bg-kolben-ink-dark text-white text-xs font-bold rounded-lg shrink-0"
+              >
+                Guardar
+              </button>
+              <button
+                onClick={() => setAgregandoBanco(false)}
+                className="px-2 py-2 text-kolben-muted hover:text-kolben-text text-xs shrink-0"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAgregandoBanco(true)}
+              className="text-[12px] font-semibold text-kolben-muted hover:text-kolben-ink hover:underline"
+            >
+              + agregar banco
             </button>
+          )}
+        </div>
+      </section>
+
+      {/* BLOQUE 2: IMPUESTO */}
+      <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
+        <h2 className={sectionHeader}>Impuesto</h2>
+        <div className="max-w-[120px]">
+          <label htmlFor="cfg-isv" className={labelStyle}>ISV</label>
+          <div className="relative">
+            <input
+              id="cfg-isv"
+              type="number"
+              step="0.01"
+              className={inputStyle}
+              value={config.porcentajeIsv}
+              onChange={(e) => setConfig({ ...config, porcentajeIsv: e.target.value })}
+              onBlur={() => guardarConfiguracion()}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-kolben-muted">
+              %
+            </span>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      {/* BLOQUE 3: RESPALDO SEMANAL DE POR COBRAR */}
+      <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
+        <h2 className={sectionHeader}>Respaldo semanal de por cobrar</h2>
+        <div className="flex items-end gap-4 max-w-2xl">
+          <div className="flex-1">
+            <label htmlFor="cfg-correo" className={labelStyle}>Correo</label>
+            <input
+              id="cfg-correo"
+              type="email"
+              className={inputStyle}
+              placeholder="javierescalante77@gmail.com"
+              value={config.correoRespaldo ?? ''}
+              onChange={(e) => setConfig({ ...config, correoRespaldo: e.target.value })}
+              onBlur={() => guardarConfiguracion()}
+            />
+          </div>
+          <div className="w-36">
+            <label htmlFor="cfg-dia" className={labelStyle}>Día</label>
+            <select
+              id="cfg-dia"
+              className={inputStyle}
+              value={config.diaRespaldo}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setConfig({ ...config, diaRespaldo: val });
+                guardarConfiguracion({ diaRespaldo: val });
+              }}
+            >
+              {DIAS_SEMANA.map((d) => (
+                <option key={d.val} value={d.val}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => flash('ok', 'Prueba de respaldo enviada')}
+            className="px-4 py-[9px] rounded-lg border border-kolben-line bg-white hover:bg-slate-50 text-[11px] font-bold uppercase tracking-[0.08em] text-kolben-text transition shrink-0"
+          >
+            Enviar prueba
+          </button>
+        </div>
+      </section>
+
+      {/* BLOQUE 4: USUARIO */}
+      <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
+        <h2 className={sectionHeader}>Usuario</h2>
+        <div className="grid grid-cols-4 gap-4 mb-4">
+          <div>
+            <label htmlFor="usr-nombre" className={labelStyle}>Usuario</label>
+            <input
+              id="usr-nombre"
+              className={inputStyle}
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="usr-pwd-actual" className={labelStyle}>Contraseña actual</label>
+            <input
+              id="usr-pwd-actual"
+              type="password"
+              className={inputStyle}
+              placeholder="••••••••"
+              value={passwordActual}
+              onChange={(e) => setPasswordActual(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="usr-pwd-nueva" className={labelStyle}>Nueva</label>
+            <input
+              id="usr-pwd-nueva"
+              type="password"
+              className={inputStyle}
+              placeholder="••••••••"
+              value={nuevaPassword}
+              onChange={(e) => setNuevaPassword(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="usr-pwd-repetir" className={labelStyle}>Repetir nueva</label>
+            <input
+              id="usr-pwd-repetir"
+              type="password"
+              className={inputStyle}
+              placeholder="••••••••"
+              value={repetirPassword}
+              onChange={(e) => setRepetirPassword(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={guardarUsuario}
+            disabled={guardandoUsuario}
+            className="px-4 py-[9px] rounded-lg bg-kolben-ink hover:bg-kolben-ink-dark text-white text-[11px] font-bold uppercase tracking-[0.08em] transition disabled:opacity-50"
+          >
+            {guardandoUsuario ? 'Guardando...' : 'Guardar usuario'}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

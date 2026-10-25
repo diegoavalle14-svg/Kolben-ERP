@@ -84,3 +84,32 @@ authRouter.post("/logout", (_req, res) => {
 authRouter.get("/me", requireAuth, (req, res) => {
   res.json({ usuario: req.user?.usuario });
 });
+
+const cambioSchema = z.object({
+  usuario: z.string().trim().min(3, "Usuario mínimo 3 caracteres"),
+  passwordActual: z.string().min(1, "Ingresa tu contraseña actual"),
+  nueva: z.string().min(8, "La nueva contraseña debe tener mínimo 8 caracteres").optional().or(z.literal("")),
+});
+
+// Cambiar usuario y/o contraseña (requiere la contraseña actual)
+authRouter.put(
+  "/password",
+  requireAuth,
+  wrap(async (req, res) => {
+    const { usuario, passwordActual, nueva } = cambioSchema.parse(req.body);
+    const actual = await prisma.usuario.findUnique({ where: { id: req.user!.sub } });
+    if (!actual || !(await bcrypt.compare(passwordActual, actual.passwordHash))) {
+      return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+    }
+    if (usuario !== actual.usuario) {
+      const existe = await prisma.usuario.findUnique({ where: { usuario } });
+      if (existe) return res.status(409).json({ error: "Ese usuario ya existe" });
+    }
+    const u = await prisma.usuario.update({
+      where: { id: actual.id },
+      data: { usuario, ...(nueva ? { passwordHash: await bcrypt.hash(nueva, 12) } : {}) },
+    });
+    setSessionCookie(res, u.id, u.usuario);
+    res.json({ usuario: u.usuario });
+  })
+);

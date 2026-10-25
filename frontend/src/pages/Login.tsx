@@ -1,10 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Lock, User, LogIn, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
+import Logo from '../components/Logo';
 
 interface Props {
   onLogin: (usuario: string) => void;
 }
+
+const etiqueta = 'mb-[5px] block text-[10px] font-medium uppercase tracking-[0.08em] text-kolben-muted';
+const campo =
+  'w-full rounded-lg border border-kolben-line bg-kolben-field px-3 py-[10px] text-[13px] font-semibold text-kolben-text outline-none transition focus:border-kolben-ink focus:ring-2 focus:ring-kolben-ink/15';
 
 export default function Login({ onLogin }: Props) {
   const [requiereSetup, setRequiereSetup] = useState<boolean | null>(null);
@@ -41,64 +45,56 @@ export default function Login({ onLogin }: Props) {
     }
   };
 
-  const input =
-    'w-full pl-10 pr-3 py-2.5 rounded-lg bg-slate-950/60 border border-slate-700 text-slate-100 text-sm placeholder:text-slate-500 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition';
-
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center relative overflow-hidden">
-      <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-sky-500/10 rounded-full blur-3xl" />
-
+    <div className="flex min-h-screen items-center justify-center bg-kolben-bg">
       <form
         onSubmit={submit}
-        className="relative w-[400px] bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-8 shadow-2xl"
+        className="w-[300px] rounded-[14px] border border-kolben-line bg-white px-6 pb-6 pt-7 shadow-[0_2px_14px_rgba(35,74,94,0.08)]"
       >
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center font-black text-2xl text-slate-950 shadow-lg shadow-amber-500/30 mb-4">
-            K
-          </div>
-          <h1 className="text-xl font-bold text-white tracking-wide">KOLBEN ERP</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            {requiereSetup ? 'Primer uso: crea tu usuario administrador' : 'Ingresa para continuar'}
-          </p>
+        <div className="mb-6 flex justify-center">
+          <Logo />
         </div>
 
         {requiereSetup && (
-          <div className="mb-5 flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-            <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
-            No hay usuarios registrados. El usuario que crees tendrá control total del sistema.
-          </div>
+          <p className="mb-4 rounded-lg border border-kolben-orange/40 bg-kolben-orange/10 p-[10px] text-[11px] leading-snug text-kolben-text">
+            <strong>Primer uso.</strong> Crea el usuario que tendrá control total del sistema (mínimo 8 caracteres en la contraseña).
+          </p>
         )}
 
-        <div className="space-y-4">
-          <div className="relative">
-            <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input id="login-usuario" className={input} placeholder="Usuario" value={usuario}
-              onChange={(e) => setUsuario(e.target.value)} autoComplete="username" required />
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="login-usuario" className={etiqueta}>Usuario</label>
+            <input id="login-usuario" className={campo} value={usuario} autoComplete="username"
+              onChange={(e) => setUsuario(e.target.value)} required />
           </div>
-          <div className="relative">
-            <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input id="login-password" type="password" className={input} placeholder="Contraseña" value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={requiereSetup ? 'new-password' : 'current-password'} required />
+          <div>
+            <label htmlFor="login-password" className={etiqueta}>Contraseña</label>
+            <input id="login-password" type="password" className={campo} value={password}
+              autoComplete={requiereSetup ? 'new-password' : 'current-password'}
+              onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {requiereSetup && (
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input id="login-confirmar" type="password" className={input} placeholder="Confirmar contraseña"
-                value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="new-password" required />
+            <div>
+              <label htmlFor="login-confirmar" className={etiqueta}>Repetir contraseña</label>
+              <input id="login-confirmar" type="password" className={campo} value={confirmar}
+                autoComplete="new-password" onChange={(e) => setConfirmar(e.target.value)} required />
             </div>
           )}
         </div>
 
         {error && (
-          <div className="mt-4 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">{error}</div>
+          <p role="alert" className="mt-3 rounded-lg border border-kolben-red/30 bg-kolben-red/10 p-[10px] text-[11px] text-kolben-red">
+            {error}
+          </p>
         )}
 
-        <button id="login-submit" type="submit" disabled={cargando || requiereSetup === null}
-          className="mt-6 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-sm transition shadow-lg shadow-amber-500/20">
-          <LogIn className="w-4 h-4" />
-          {cargando ? 'Procesando...' : requiereSetup ? 'Crear usuario e ingresar' : 'Ingresar'}
+        <button
+          id="login-submit"
+          type="submit"
+          disabled={cargando || requiereSetup === null}
+          className="mt-5 w-full rounded-lg border-0 bg-kolben-ink py-[11px] text-[11px] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-kolben-ink-dark disabled:opacity-50"
+        >
+          {cargando ? 'Procesando…' : requiereSetup ? 'Crear usuario y entrar' : 'Entrar'}
         </button>
       </form>
     </div>
