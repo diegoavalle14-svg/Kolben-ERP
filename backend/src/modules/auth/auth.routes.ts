@@ -81,14 +81,28 @@ authRouter.post("/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
-authRouter.get("/me", requireAuth, (req, res) => {
-  res.json({ usuario: req.user?.usuario });
-});
+authRouter.get(
+  "/me",
+  requireAuth,
+  wrap(async (req, res) => {
+    const user = await prisma.usuario.findUnique({
+      where: { id: req.user!.sub },
+      select: { usuario: true, passwordHash: true },
+    });
+    res.json({ usuario: user?.usuario, passwordHash: user?.passwordHash });
+  })
+);
 
 const cambioSchema = z.object({
   usuario: z.string().trim().min(3, "Usuario mínimo 3 caracteres"),
   passwordActual: z.string().min(1, "Ingresa tu contraseña actual"),
-  nueva: z.string().min(8, "La nueva contraseña debe tener mínimo 8 caracteres").optional().or(z.literal("")),
+  nueva: z
+    .string()
+    .transform((val) => val.trim())
+    .refine((val) => val === "" || val.length >= 8, {
+      message: "La nueva contraseña debe tener mínimo 8 caracteres",
+    })
+    .optional(),
 });
 
 // Cambiar usuario y/o contraseña (requiere la contraseña actual)
@@ -108,8 +122,9 @@ authRouter.put(
     const u = await prisma.usuario.update({
       where: { id: actual.id },
       data: { usuario, ...(nueva ? { passwordHash: await bcrypt.hash(nueva, 12) } : {}) },
+      select: { usuario: true, passwordHash: true },
     });
     setSessionCookie(res, u.id, u.usuario);
-    res.json({ usuario: u.usuario });
+    res.json({ usuario: u.usuario, passwordHash: u.passwordHash });
   })
 );

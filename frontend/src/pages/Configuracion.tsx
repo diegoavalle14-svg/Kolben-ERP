@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Config {
@@ -40,6 +41,11 @@ export default function Configuracion() {
   const [nuevaPassword, setNuevaPassword] = useState('');
   const [repetirPassword, setRepetirPassword] = useState('');
   
+  // Ver contraseña toggles
+  const [verActual, setVerActual] = useState(false);
+  const [verNueva, setVerNueva] = useState(false);
+  const [verRepetir, setVerRepetir] = useState(false);
+  
   // Feedback
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
@@ -53,7 +59,9 @@ export default function Configuracion() {
       .catch((e) => flash('error', e.message));
 
     api<{ usuario: string }>('/auth/me')
-      .then((d) => setUsuario(d.usuario))
+      .then((d) => {
+        setUsuario(d.usuario);
+      })
       .catch(() => {});
   };
 
@@ -111,18 +119,24 @@ export default function Configuracion() {
       flash('error', 'Ingresa tu contraseña actual');
       return;
     }
-    if (nuevaPassword && nuevaPassword !== repetirPassword) {
-      flash('error', 'Las contraseñas nuevas no coinciden');
-      return;
+    if (nuevaPassword) {
+      if (nuevaPassword.length < 8) {
+        flash('error', 'La nueva contraseña debe tener al menos 8 caracteres');
+        return;
+      }
+      if (nuevaPassword !== repetirPassword) {
+        flash('error', 'Las contraseñas nuevas no coinciden');
+        return;
+      }
     }
     setGuardandoUsuario(true);
     try {
-      await api('/auth/password', {
+      await api<{ usuario: string }>('/auth/password', {
         method: 'PUT',
         body: JSON.stringify({
           usuario,
           passwordActual,
-          nueva: nuevaPassword || undefined,
+          nueva: nuevaPassword || '',
         }),
       });
       setPasswordActual('');
@@ -353,46 +367,76 @@ export default function Configuracion() {
           </div>
           <div>
             <label htmlFor="usr-pwd-actual" className={labelStyle}>Contraseña actual</label>
-            <input
-              id="usr-pwd-actual"
-              type="password"
-              className={inputStyle}
-              placeholder="••••••••"
-              value={passwordActual}
-              onChange={(e) => setPasswordActual(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                id="usr-pwd-actual"
+                type={verActual ? 'text' : 'password'}
+                className={`${inputStyle} pr-9`}
+                placeholder="••••••••"
+                value={passwordActual}
+                onChange={(e) => setPasswordActual(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setVerActual(!verActual)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-kolben-muted hover:text-kolben-text transition p-0.5"
+                title={verActual ? "Ocultar" : "Mostrar"}
+              >
+                {verActual ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
           <div>
             <label htmlFor="usr-pwd-nueva" className={labelStyle}>Nueva</label>
-            <input
-              id="usr-pwd-nueva"
-              type="password"
-              className={inputStyle}
-              placeholder="••••••••"
-              value={nuevaPassword}
-              onChange={(e) => setNuevaPassword(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                id="usr-pwd-nueva"
+                type={verNueva ? 'text' : 'password'}
+                className={`${inputStyle} pr-9`}
+                placeholder="••••••••"
+                value={nuevaPassword}
+                onChange={(e) => setNuevaPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setVerNueva(!verNueva)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-kolben-muted hover:text-kolben-text transition p-0.5"
+                title={verNueva ? "Ocultar" : "Mostrar"}
+              >
+                {verNueva ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
           <div>
             <label htmlFor="usr-pwd-repetir" className={labelStyle}>Repetir nueva</label>
-            <input
-              id="usr-pwd-repetir"
-              type="password"
-              className={inputStyle}
-              placeholder="••••••••"
-              value={repetirPassword}
-              onChange={(e) => setRepetirPassword(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                id="usr-pwd-repetir"
+                type={verRepetir ? 'text' : 'password'}
+                className={`${inputStyle} pr-9`}
+                placeholder="••••••••"
+                value={repetirPassword}
+                onChange={(e) => setRepetirPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setVerRepetir(!verRepetir)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-kolben-muted hover:text-kolben-text transition p-0.5"
+                title={verRepetir ? "Ocultar" : "Mostrar"}
+              >
+                {verRepetir ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           <button
             onClick={guardarUsuario}
             disabled={guardandoUsuario}
             className="px-4 py-[9px] rounded-lg bg-kolben-ink hover:bg-kolben-ink-dark text-white text-[11px] font-bold uppercase tracking-[0.08em] transition disabled:opacity-50"
           >
-            {guardandoUsuario ? 'Guardando...' : 'Guardar usuario'}
+            {guardandoUsuario ? 'Guardando...' : 'Cambiar contraseña'}
           </button>
         </div>
       </section>

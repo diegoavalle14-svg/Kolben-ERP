@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/api';
 import Logo from '../components/Logo';
 
@@ -15,6 +16,8 @@ export default function Login({ onLogin }: Props) {
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [confirmar, setConfirmar] = useState('');
+  const [verPassword, setVerPassword] = useState(false);
+  const [verConfirmar, setVerConfirmar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -69,15 +72,35 @@ export default function Login({ onLogin }: Props) {
           </div>
           <div>
             <label htmlFor="login-password" className={etiqueta}>Contraseña</label>
-            <input id="login-password" type="password" className={campo} value={password}
-              autoComplete={requiereSetup ? 'new-password' : 'current-password'}
-              onChange={(e) => setPassword(e.target.value)} required />
+            <div className="relative">
+              <input id="login-password" type={verPassword ? 'text' : 'password'} className={`${campo} pr-9`} value={password}
+                autoComplete={requiereSetup ? 'new-password' : 'current-password'}
+                onChange={(e) => setPassword(e.target.value)} required />
+              <button
+                type="button"
+                onClick={() => setVerPassword(!verPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-kolben-muted hover:text-kolben-text transition p-0.5"
+                title={verPassword ? "Ocultar" : "Mostrar"}
+              >
+                {verPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
           {requiereSetup && (
             <div>
               <label htmlFor="login-confirmar" className={etiqueta}>Repetir contraseña</label>
-              <input id="login-confirmar" type="password" className={campo} value={confirmar}
-                autoComplete="new-password" onChange={(e) => setConfirmar(e.target.value)} required />
+              <div className="relative">
+                <input id="login-confirmar" type={verConfirmar ? 'text' : 'password'} className={`${campo} pr-9`} value={confirmar}
+                  autoComplete="new-password" onChange={(e) => setConfirmar(e.target.value)} required />
+                <button
+                  type="button"
+                  onClick={() => setVerConfirmar(!verConfirmar)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-kolben-muted hover:text-kolben-text transition p-0.5"
+                  title={verConfirmar ? "Ocultar" : "Mostrar"}
+                >
+                  {verConfirmar ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
           )}
         </div>
