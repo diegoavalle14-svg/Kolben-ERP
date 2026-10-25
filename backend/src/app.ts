@@ -3,6 +3,10 @@ import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
+import { configRouter } from "./modules/config/config.routes.js";
+import { requireAuth } from "./middlewares/auth.js";
+import { errorHandler } from "./middlewares/error.js";
 
 export const app = express();
 
@@ -30,3 +34,12 @@ app.get("/api/health", (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Rutas públicas de autenticación
+app.use("/api/auth", authRouter);
+
+// Rutas protegidas
+app.use("/api/config", requireAuth, configRouter);
+
+// Manejo global de errores
+app.use(errorHandler);
