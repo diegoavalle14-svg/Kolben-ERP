@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Check, X, ArrowUp, ArrowDown, MinusCircle } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Config {
@@ -129,6 +129,18 @@ export default function Configuracion() {
       await api(`/config/bancos/${id}`, { method: 'DELETE' });
       cargar();
       flash('ok', 'Banco eliminado');
+    } catch (e) {
+      flash('error', (e as Error).message);
+    }
+  };
+
+  const moverBanco = async (id: number, dir: 'up' | 'down') => {
+    try {
+      await api(`/config/bancos/${id}/mover`, {
+        method: 'POST',
+        body: JSON.stringify({ dir }),
+      });
+      cargar();
     } catch (e) {
       flash('error', (e as Error).message);
     }
@@ -307,20 +319,36 @@ export default function Configuracion() {
                       <span className="font-mono text-[13px] text-kolben-text tracking-wider">
                         {b.cuentaEnmascarada}
                       </span>
-                      <button
-                        onClick={() => iniciarEdicionBanco(b)}
-                        className="opacity-0 group-hover:opacity-100 text-kolben-muted hover:text-kolben-ink transition p-1"
-                        title="Editar"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => eliminarBanco(b.id)}
-                        className="opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 transition p-1"
-                        title="Eliminar"
-                      >
-                        ✕
-                      </button>
+                      <div className="flex items-center gap-1 text-kolben-muted">
+                        <button
+                          onClick={() => moverBanco(b.id, 'up')}
+                          className="p-1 hover:text-kolben-ink hover:bg-kolben-bg rounded transition"
+                          title="Subir"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          onClick={() => moverBanco(b.id, 'down')}
+                          className="p-1 hover:text-kolben-ink hover:bg-kolben-bg rounded transition"
+                          title="Bajar"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                        <button
+                          onClick={() => iniciarEdicionBanco(b)}
+                          className="p-1 hover:text-kolben-ink hover:bg-kolben-bg rounded transition"
+                          title="Editar"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => eliminarBanco(b.id)}
+                          className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                          title="Eliminar"
+                        >
+                          <MinusCircle size={13} />
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}

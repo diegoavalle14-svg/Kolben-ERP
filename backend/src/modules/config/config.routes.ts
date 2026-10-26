@@ -68,6 +68,24 @@ configRouter.put(
   })
 );
 
+configRouter.post(
+  "/bancos/:id/mover",
+  wrap(async (req, res) => {
+    const { dir } = z.object({ dir: z.enum(["up", "down"]) }).parse(req.body);
+    const id = Number(req.params.id);
+    const bancos = await prisma.banco.findMany({ orderBy: { orden: "asc" } });
+    const i = bancos.findIndex((b) => b.id === id);
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (i >= 0 && j >= 0 && j < bancos.length) {
+      [bancos[i], bancos[j]] = [bancos[j], bancos[i]];
+      await prisma.$transaction(
+        bancos.map((b, idx) => prisma.banco.update({ where: { id: b.id }, data: { orden: idx + 1 } }))
+      );
+    }
+    res.json({ ok: true });
+  })
+);
+
 configRouter.delete(
   "/bancos/:id",
   wrap(async (req, res) => {
