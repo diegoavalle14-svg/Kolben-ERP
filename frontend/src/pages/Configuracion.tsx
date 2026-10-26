@@ -397,19 +397,21 @@ export default function Configuracion() {
       {/* BLOQUE 2: IMPUESTO */}
       <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
         <h2 className={sectionHeader}>Impuesto</h2>
-        <div className="max-w-[120px]">
+        <div className="w-fit">
           <label htmlFor="cfg-isv" className={labelStyle}>ISV</label>
-          <div className="relative">
+          <div className="flex items-center gap-1.5">
             <input
               id="cfg-isv"
               type="number"
-              step="0.01"
-              className={inputStyle}
+              step="1"
+              min="0"
+              max="100"
+              className={`${inputStyle} !w-16 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
               value={config.porcentajeIsv}
               onChange={(e) => setConfig({ ...config, porcentajeIsv: e.target.value })}
               onBlur={() => guardarConfiguracion()}
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-kolben-muted">
+            <span className="text-[14px] font-bold text-kolben-text">
               %
             </span>
           </div>
