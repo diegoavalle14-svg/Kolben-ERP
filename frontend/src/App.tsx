@@ -4,6 +4,7 @@ import { api } from './lib/api';
 import Login from './pages/Login';
 import Layout, { MODULOS, type ModuloId } from './components/Layout';
 import Configuracion from './pages/Configuracion';
+import Productos from './pages/Productos';
 
 function Pendiente({ id }: { id: ModuloId }) {
   const m = MODULOS.find((x) => x.id === id)!;
@@ -41,7 +42,7 @@ export default function App() {
 
   return (
     <Layout usuario={usuario} activo={modulo} onNavegar={setModulo} onLogout={logout}>
-      {modulo === 'config' ? <Configuracion /> : <Pendiente id={modulo} />}
+      {modulo === 'config' ? <Configuracion /> : modulo === 'productos' ? <Productos /> : <Pendiente id={modulo} />}
     </Layout>
   );
 }

@@ -84,6 +84,7 @@ model Categoria {
   nombre    String     @unique
   orden     Int
   empaque   Int        @default(10)
+  multiplicador Decimal  @default(2.0) @db.Decimal(6, 3)
   productos Producto[]
 }
 

@@ -122,9 +122,9 @@ authRouter.put(
     const u = await prisma.usuario.update({
       where: { id: actual.id },
       data: { usuario, ...(nueva ? { passwordHash: await bcrypt.hash(nueva, 12) } : {}) },
-      select: { usuario: true, passwordHash: true },
+      select: { id: true, usuario: true },
     });
     setSessionCookie(res, u.id, u.usuario);
-    res.json({ usuario: u.usuario, passwordHash: u.passwordHash });
+    res.json({ usuario: u.usuario });
   })
 );

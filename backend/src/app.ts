@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
+import path from "node:path";
+import { productosRouter, categoriasRouter, marcasRouter } from "./modules/productos/productos.routes.js";
 import { requireAuth } from "./middlewares/auth.js";
 import { errorHandler } from "./middlewares/error.js";
 
@@ -40,6 +42,10 @@ app.use("/api/auth", authRouter);
 
 // Rutas protegidas
 app.use("/api/config", requireAuth, configRouter);
+app.use("/api/productos", requireAuth, productosRouter);
+app.use("/api/categorias", requireAuth, categoriasRouter);
+app.use("/api/marcas", requireAuth, marcasRouter);
+app.use("/api/uploads", requireAuth, express.static(path.resolve(process.cwd(), "uploads")));
 
 // Manejo global de errores
 app.use(errorHandler);
