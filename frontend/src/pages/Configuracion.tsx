@@ -108,6 +108,12 @@ export default function Configuracion() {
     }
   };
 
+  const onEnterBlur = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const agregarBanco = async () => {
     if (!nuevoBanco.nombre || !nuevoBanco.cuentaEnmascarada) return;
     try {
@@ -245,6 +251,7 @@ export default function Configuracion() {
               className={inputStyle}
               value={config.vendedor}
               onChange={(e) => setConfig({ ...config, vendedor: e.target.value })}
+              onKeyDown={onEnterBlur}
               onBlur={() => guardarConfiguracion()}
             />
           </div>
@@ -255,6 +262,7 @@ export default function Configuracion() {
               className={inputStyle}
               value={config.contacto}
               onChange={(e) => setConfig({ ...config, contacto: e.target.value })}
+              onKeyDown={onEnterBlur}
               onBlur={() => guardarConfiguracion()}
             />
           </div>
@@ -266,6 +274,7 @@ export default function Configuracion() {
               placeholder="[titular de la cuenta]"
               value={config.titularCheques ?? ''}
               onChange={(e) => setConfig({ ...config, titularCheques: e.target.value })}
+              onKeyDown={onEnterBlur}
               onBlur={() => guardarConfiguracion()}
             />
           </div>
@@ -289,12 +298,20 @@ export default function Configuracion() {
                       className={`${inputStyle} !py-1 !text-xs`}
                       value={datosEdicionBanco.nombre}
                       onChange={(e) => setDatosEdicionBanco({ ...datosEdicionBanco, nombre: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') guardarEdicionBanco(b.id);
+                        if (e.key === 'Escape') setEditandoBancoId(null);
+                      }}
                       placeholder="Nombre del banco"
                     />
                     <input
                       className={`${inputStyle} !py-1 !text-xs !w-44`}
                       value={datosEdicionBanco.cuentaEnmascarada}
                       onChange={(e) => setDatosEdicionBanco({ ...datosEdicionBanco, cuentaEnmascarada: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') guardarEdicionBanco(b.id);
+                        if (e.key === 'Escape') setEditandoBancoId(null);
+                      }}
                       placeholder="Cuenta"
                     />
                     <button
@@ -363,12 +380,14 @@ export default function Configuracion() {
                 placeholder="Nombre del banco (ej. BAC ahorros)"
                 value={nuevoBanco.nombre}
                 onChange={(e) => setNuevoBanco({ ...nuevoBanco, nombre: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') agregarBanco(); }}
               />
               <input
                 className={inputStyle}
                 placeholder="Cuenta (ej. ••••6381)"
                 value={nuevoBanco.cuentaEnmascarada}
                 onChange={(e) => setNuevoBanco({ ...nuevoBanco, cuentaEnmascarada: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') agregarBanco(); }}
               />
               <button
                 onClick={agregarBanco}
@@ -409,6 +428,7 @@ export default function Configuracion() {
               className={`${inputStyle} !w-16 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
               value={config.porcentajeIsv}
               onChange={(e) => setConfig({ ...config, porcentajeIsv: e.target.value })}
+              onKeyDown={onEnterBlur}
               onBlur={() => guardarConfiguracion()}
             />
             <span className="text-[14px] font-bold text-kolben-text">
@@ -431,6 +451,7 @@ export default function Configuracion() {
               placeholder="javierescalante77@gmail.com"
               value={config.correoRespaldo ?? ''}
               onChange={(e) => setConfig({ ...config, correoRespaldo: e.target.value })}
+              onKeyDown={onEnterBlur}
               onBlur={() => guardarConfiguracion()}
             />
           </div>
@@ -473,6 +494,7 @@ export default function Configuracion() {
               className={inputStyle}
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') guardarUsuario(); }}
             />
           </div>
           <div>
@@ -485,6 +507,7 @@ export default function Configuracion() {
                 placeholder="••••••••"
                 value={passwordActual}
                 onChange={(e) => setPasswordActual(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') guardarUsuario(); }}
               />
               <button
                 type="button"
@@ -506,6 +529,7 @@ export default function Configuracion() {
                 placeholder="••••••••"
                 value={nuevaPassword}
                 onChange={(e) => setNuevaPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') guardarUsuario(); }}
               />
               <button
                 type="button"
@@ -527,6 +551,7 @@ export default function Configuracion() {
                 placeholder="••••••••"
                 value={repetirPassword}
                 onChange={(e) => setRepetirPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') guardarUsuario(); }}
               />
               <button
                 type="button"
