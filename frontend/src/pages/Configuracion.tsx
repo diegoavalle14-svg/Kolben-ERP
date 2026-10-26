@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -31,6 +31,7 @@ const DIAS_SEMANA = [
 
 export default function Configuracion() {
   const [config, setConfig] = useState<Config | null>(null);
+  const configGuardadaRef = useRef<Config | null>(null);
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [agregandoBanco, setAgregandoBanco] = useState(false);
   const [nuevoBanco, setNuevoBanco] = useState({ nombre: '', cuentaEnmascarada: '' });
@@ -56,6 +57,7 @@ export default function Configuracion() {
     api<{ config: Config; bancos: Banco[] }>('/config')
       .then((d) => {
         setConfig(d.config);
+        configGuardadaRef.current = d.config;
         setBancos(d.bancos);
       })
       .catch((e) => flash('error', e.message));
@@ -79,11 +81,27 @@ export default function Configuracion() {
   const guardarConfiguracion = async (nuevoValor?: Partial<Config>) => {
     if (!config) return;
     const datosAGuardar = { ...config, ...(nuevoValor || {}) };
+    
+    // Comparar con el último valor guardado para evitar peticiones y mensajes si no cambió nada
+    const anterior = configGuardadaRef.current;
+    if (anterior) {
+      const cambio =
+        String(datosAGuardar.vendedor).trim() !== String(anterior.vendedor).trim() ||
+        String(datosAGuardar.contacto).trim() !== String(anterior.contacto).trim() ||
+        String(datosAGuardar.titularCheques ?? '').trim() !== String(anterior.titularCheques ?? '').trim() ||
+        Number(datosAGuardar.porcentajeIsv) !== Number(anterior.porcentajeIsv) ||
+        String(datosAGuardar.correoRespaldo ?? '').trim() !== String(anterior.correoRespaldo ?? '').trim() ||
+        Number(datosAGuardar.diaRespaldo) !== Number(anterior.diaRespaldo);
+
+      if (!cambio) return;
+    }
+
     try {
       await api('/config', {
         method: 'PUT',
         body: JSON.stringify(datosAGuardar),
       });
+      configGuardadaRef.current = datosAGuardar;
       flash('ok', 'Configuración guardada');
     } catch (e) {
       flash('error', (e as Error).message);
