@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Config {
@@ -34,6 +34,8 @@ export default function Configuracion() {
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [agregandoBanco, setAgregandoBanco] = useState(false);
   const [nuevoBanco, setNuevoBanco] = useState({ nombre: '', cuentaEnmascarada: '' });
+  const [editandoBancoId, setEditandoBancoId] = useState<number | null>(null);
+  const [datosEdicionBanco, setDatosEdicionBanco] = useState({ nombre: '', cuentaEnmascarada: '' });
   
   // Usuario fields
   const [usuario, setUsuario] = useState('');
@@ -114,6 +116,29 @@ export default function Configuracion() {
     }
   };
 
+  const iniciarEdicionBanco = (b: Banco) => {
+    setEditandoBancoId(b.id);
+    setDatosEdicionBanco({ nombre: b.nombre, cuentaEnmascarada: b.cuentaEnmascarada });
+  };
+
+  const guardarEdicionBanco = async (id: number) => {
+    if (!datosEdicionBanco.nombre.trim() || !datosEdicionBanco.cuentaEnmascarada.trim()) {
+      flash('error', 'El nombre y la cuenta son requeridos');
+      return;
+    }
+    try {
+      await api(`/config/bancos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(datosEdicionBanco),
+      });
+      setEditandoBancoId(null);
+      cargar();
+      flash('ok', 'Banco actualizado');
+    } catch (e) {
+      flash('error', (e as Error).message);
+    }
+  };
+
   const guardarUsuario = async () => {
     if (!passwordActual) {
       flash('error', 'Ingresa tu contraseña actual');
@@ -179,10 +204,7 @@ export default function Configuracion() {
       {/* BLOQUE 1: DATOS DE LA PROFORMA */}
       <section className="rounded-xl border border-kolben-line bg-kolben-card p-6 shadow-sm">
         <h2 className={sectionHeader}>
-          Datos de la proforma{' '}
-          <span className="font-normal text-kolben-muted tracking-normal lowercase">
-            · salen en el PDF que recibe el cliente
-          </span>
+          Datos de la proforma
         </h2>
 
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -222,28 +244,68 @@ export default function Configuracion() {
         {/* BANCOS AUTORIZADOS */}
         <div>
           <div className="text-[11px] font-medium text-kolben-muted mb-3">
-            BANCOS AUTORIZADOS <span className="text-[10px] lowercase text-kolben-muted">· en este orden</span>
+            BANCOS AUTORIZADOS
           </div>
 
           <div className="space-y-2 mb-3 max-w-xl">
             {bancos.map((b) => (
               <div
                 key={b.id}
-                className="flex items-center justify-between text-sm py-1 border-b border-kolben-line/60 group"
+                className="flex items-center justify-between text-sm py-1.5 border-b border-kolben-line/60 group"
               >
-                <span className="font-semibold text-kolben-text text-[13px]">{b.nombre}</span>
-                <div className="flex items-center gap-4">
-                  <span className="font-mono text-[13px] text-kolben-text tracking-wider">
-                    {b.cuentaEnmascarada}
-                  </span>
-                  <button
-                    onClick={() => eliminarBanco(b.id)}
-                    className="opacity-0 group-hover:opacity-100 text-xs text-rose-500 hover:text-rose-700 transition"
-                    title="Eliminar"
-                  >
-                    ✕
-                  </button>
-                </div>
+                {editandoBancoId === b.id ? (
+                  <div className="flex items-center gap-2 w-full py-1">
+                    <input
+                      className={`${inputStyle} !py-1 !text-xs`}
+                      value={datosEdicionBanco.nombre}
+                      onChange={(e) => setDatosEdicionBanco({ ...datosEdicionBanco, nombre: e.target.value })}
+                      placeholder="Nombre del banco"
+                    />
+                    <input
+                      className={`${inputStyle} !py-1 !text-xs !w-44`}
+                      value={datosEdicionBanco.cuentaEnmascarada}
+                      onChange={(e) => setDatosEdicionBanco({ ...datosEdicionBanco, cuentaEnmascarada: e.target.value })}
+                      placeholder="Cuenta"
+                    />
+                    <button
+                      onClick={() => guardarEdicionBanco(b.id)}
+                      className="p-1 rounded text-emerald-600 hover:bg-emerald-50 transition"
+                      title="Guardar"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => setEditandoBancoId(null)}
+                      className="p-1 rounded text-kolben-muted hover:bg-kolben-bg transition"
+                      title="Cancelar"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-semibold text-kolben-text text-[13px]">{b.nombre}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-[13px] text-kolben-text tracking-wider">
+                        {b.cuentaEnmascarada}
+                      </span>
+                      <button
+                        onClick={() => iniciarEdicionBanco(b)}
+                        className="opacity-0 group-hover:opacity-100 text-kolben-muted hover:text-kolben-ink transition p-1"
+                        title="Editar"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => eliminarBanco(b.id)}
+                        className="opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 transition p-1"
+                        title="Eliminar"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
