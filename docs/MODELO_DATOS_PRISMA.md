@@ -1,6 +1,6 @@
 // ==========================================
-// Kolben ERP — Modelo de Datos Inicial Prisma
-// Fuente: Kolben ERP Documentación Técnica v1.1
+// Kolben ERP — Modelo de Datos Prisma (v1.2)
+// Fuente: Especificación Funcional v1.1 (28/10/2026)
 // ==========================================
 
 generator client {
@@ -48,6 +48,7 @@ enum MedioAbono {
   TRANSFERENCIA
   CHEQUE
   DEVOLUCION
+  CARGA_INICIAL
 }
 
 enum GrupoGasto {
@@ -72,22 +73,22 @@ model Usuario {
 }
 
 model Configuracion { // Registro único (id = 1)
-  id               Int      @id @default(1)
-  vendedor         String
-  contacto         String
-  titularCheques   String?
-  porcentajeIsv    Decimal  @default(15) @db.Decimal(5, 2)
-  correoRespaldo   String?
-  diaRespaldo      Int      @default(1)
-  pctMesSinStock   Decimal  @default(100) @db.Decimal(5, 2) // % de días del mes en 0 para mes sin stock
+  id             Int      @id @default(1)
+  vendedor       String
+  contacto       String
+  titularCheques String?
+  porcentajeIsv  Decimal  @default(15) @db.Decimal(5, 2)
+  correoRespaldo String?
+  diaRespaldo    Int      @default(1)
+  portadaPath    String?  // Portada del catálogo PDF
+  paletaCatalogo String   @default("SISTEMA_KOLBEN")
 }
 
-model Banco {
-  id                Int     @id @default(autoincrement())
+model Banco { // Bancos autorizados que aparecen en la proforma
+  id                Int    @id @default(autoincrement())
   nombre            String
   cuentaEnmascarada String
   orden             Int
-  saldoLempiras     Decimal @default(0) @db.Decimal(14, 2)
 }
 
 // ------------------------------------------
@@ -95,11 +96,12 @@ model Banco {
 // ------------------------------------------
 
 model Categoria {
-  id        Int        @id @default(autoincrement())
-  nombre    String     @unique
-  orden     Int
-  empaque   Int        @default(10) // 10 / 20 / 50
-  productos Producto[]
+  id            Int        @id @default(autoincrement())
+  nombre        String     @unique
+  orden         Int
+  empaque       Int        @default(10) // 10 / 20 / 50
+  multiplicador Decimal    @default(2.0) @db.Decimal(6, 3)
+  productos     Producto[]
 }
 
 model Marca {
@@ -131,26 +133,27 @@ model Ciudad {
 // ------------------------------------------
 
 model Producto {
-  id                Int                @id @default(autoincrement())
-  codigo            String             @unique
-  categoriaId       Int
-  marcaId           Int
-  descripcion       String             // Una línea por dato
-  cbmUnidad         Decimal            @default(0) @db.Decimal(8, 4)
-  fotoPath          String?
-  activo            Boolean            @default(true)
-  posicion          Int
-  categoria         Categoria          @relation(fields: [categoriaId], references: [id])
-  marca             Marca              @relation(fields: [marcaId], references: [id])
-  lotes             Lote[]
-  ajustes           AjusteStock[]
-  precios           PrecioCliente[]
-  lineasProforma    LineaProforma[]
-  lineasFactura     LineaFactura[]
-  lineasPedido      LineaPedido[]
-  ventasBase        VentaBase[]
-  mesesSinStock     MesSinStock[]
-  periodosSinStock  PeriodoSinStock[]
+  id                  Int                   @id @default(autoincrement())
+  codigo              String                @unique
+  categoriaId         Int
+  marcaId             Int
+  descripcion         String                // Una línea por dato
+  cbmUnidad           Decimal               @default(0) @db.Decimal(8, 4)
+  fotoPath            String?
+  activo              Boolean               @default(true)
+  posicion            Int
+  categoria           Categoria             @relation(fields: [categoriaId], references: [id])
+  marca               Marca                 @relation(fields: [marcaId], references: [id])
+  lotes               Lote[]
+  ajustes             AjusteStock[]
+  precios             PrecioCliente[]
+  lineasProforma      LineaProforma[]
+  lineasFactura       LineaFactura[]
+  lineasPedido        LineaPedido[]
+  ventasBase          VentaBase[]
+  mesesSinStock       MesSinStock[]
+  periodosSinStock    PeriodoSinStock[]
+  borradorCalculadora BorradorCalculadora?
 
   @@index([categoriaId, marcaId, posicion])
 }
@@ -177,7 +180,7 @@ model AjusteStock {
   id           Int      @id @default(autoincrement())
   productoId   Int
   fecha        DateTime @default(now())
-  unidades     Int      // positivo entra, negativo sale
+  unidades     Int      // positivo entra (al más nuevo), negativo sale (del más viejo)
   motivo       String
   stockAntes   Int
   stockDespues Int
@@ -204,7 +207,7 @@ model Cliente {
   facturas    Factura[]
 }
 
-model PrecioCliente { // Precio sin ISV
+model PrecioCliente { // Precio sin ISV; cada cambio va a Historial
   id         Int      @id @default(autoincrement())
   clienteId  Int
   productoId Int
@@ -221,51 +224,51 @@ model PrecioCliente { // Precio sin ISV
 // ------------------------------------------
 
 model Proforma {
-  id         Int             @id @default(autoincrement())
-  numero     Int             @unique
-  clienteId  Int
-  fecha      DateTime
-  dias       Int
-  vence      DateTime
-  tipo       TipoVenta       @default(CREDITO)
-  aplicaIsv  Boolean         @default(false)
-  estado     EstadoProforma  @default(PENDIENTE)
-  creadoEn   DateTime        @default(now())
-  cliente    Cliente         @relation(fields: [clienteId], references: [id])
-  lineas     LineaProforma[]
-  factura    Factura?
+  id        Int             @id @default(autoincrement())
+  numero    Int             @unique
+  clienteId Int
+  fecha     DateTime
+  dias      Int
+  vence     DateTime
+  tipo      TipoVenta       @default(CREDITO)
+  aplicaIsv Boolean         @default(false)
+  estado    EstadoProforma  @default(PENDIENTE)
+  creadoEn  DateTime        @default(now())
+  cliente   Cliente         @relation(fields: [clienteId], references: [id])
+  lineas    LineaProforma[]
+  factura   Factura?
 }
 
 model LineaProforma {
-  id             Int        @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   proformaId     Int
   productoId     Int
   cantidad       Int
-  precio         Decimal    @db.Decimal(14, 2)
-  precioCambiado Boolean    @default(false)
-  tipo           TipoLinea  @default(NORMAL)
-  proforma       Proforma   @relation(fields: [proformaId], references: [id], onDelete: Cascade)
-  producto       Producto   @relation(fields: [productoId], references: [id])
+  precio         Decimal   @db.Decimal(14, 2)
+  precioCambiado Boolean   @default(false)
+  tipo           TipoLinea @default(NORMAL)
+  proforma       Proforma  @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  producto       Producto  @relation(fields: [productoId], references: [id])
 }
 
 model Factura {
-  id             Int            @id @default(autoincrement())
-  numero         Int            @unique // Consecutivo interno (no SAR)
-  proformaId     Int?           @unique
-  clienteId      Int
-  fecha          DateTime
-  vence          DateTime
-  tipo           TipoVenta
-  subtotal       Decimal        @db.Decimal(14, 2)
-  isv            Decimal        @default(0) @db.Decimal(14, 2)
-  total          Decimal        @db.Decimal(14, 2)
-  cargaInicial   Boolean        @default(false)
-  eliminada      Boolean        @default(false)
-  eliminadaEn    DateTime?
-  proforma       Proforma?      @relation(fields: [proformaId], references: [id])
-  cliente        Cliente        @relation(fields: [clienteId], references: [id])
-  lineas         LineaFactura[]
-  abonos         Abono[]
+  id           Int            @id @default(autoincrement())
+  numero       Int            @unique // Consecutivo interno (no SAR)
+  proformaId   Int?           @unique
+  clienteId    Int
+  fecha        DateTime
+  vence        DateTime
+  tipo         TipoVenta
+  subtotal     Decimal        @db.Decimal(14, 2)
+  isv          Decimal        @default(0) @db.Decimal(14, 2)
+  total        Decimal        @db.Decimal(14, 2)
+  cargaInicial Boolean        @default(false)
+  eliminada    Boolean        @default(false)
+  eliminadaEn  DateTime?
+  proforma     Proforma?      @relation(fields: [proformaId], references: [id])
+  cliente      Cliente        @relation(fields: [clienteId], references: [id])
+  lineas       LineaFactura[]
+  abonos       Abono[]
 
   @@index([clienteId, fecha])
   @@index([fecha])
@@ -286,32 +289,48 @@ model LineaFactura {
   consumos         LoteConsumo[]
 }
 
-model LoteConsumo { // Rastrea de qué lote salió cada unidad vendida
+model LoteConsumo { // Salida por lote: de qué lote salió cada unidad vendida
   id             Int          @id @default(autoincrement())
   lineaFacturaId Int
   loteId         Int
   cantidad       Int
   costoUnidad    Decimal      @db.Decimal(14, 4)
+  fobUnidad      Decimal      @default(0) @db.Decimal(14, 4)
   lineaFactura   LineaFactura @relation(fields: [lineaFacturaId], references: [id], onDelete: Cascade)
   lote           Lote         @relation(fields: [loteId], references: [id])
 }
 
 model Abono {
-  id                   Int         @id @default(autoincrement())
+  id                   Int        @id @default(autoincrement())
   facturaId            Int
   fecha                DateTime
-  monto                Decimal     @db.Decimal(14, 2)
+  monto                Decimal    @db.Decimal(14, 2)
   numeroRecibo         String?
   medio                MedioAbono
   chequePendienteHasta DateTime?
-  factura              Factura     @relation(fields: [facturaId], references: [id])
+  factura              Factura    @relation(fields: [facturaId], references: [id])
 
   @@index([facturaId])
 }
 
 // ------------------------------------------
-// 6. Compras y Pedidos
+// 6. Compras, Calculadora y Pedidos
 // ------------------------------------------
+
+model ParametrosCompra { // Registro único (id = 1) de la Calculadora
+  id                   Int     @id @default(1)
+  mesesCiclo           Int[]   @default([3, 9]) // Ej: marzo (3) y septiembre (9)
+  porcentajeStockExtra Decimal @default(15) @db.Decimal(5, 2)
+}
+
+model BorradorCalculadora { // Lo que el usuario escribe en la Calculadora hasta ingresar la orden
+  id           Int      @id @default(autoincrement())
+  productoId   Int      @unique
+  ajuste       Int      @default(0)
+  fobUnidad    Decimal  @db.Decimal(14, 4)
+  escritoAMano Boolean  @default(false)
+  producto     Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+}
 
 model Pedido {
   id               Int              @id @default(autoincrement())
@@ -347,45 +366,66 @@ model PagoPedido {
   pedidoId Int
   fecha    DateTime
   tipo     TipoPagoPedido
-  monto    Decimal        @db.Decimal(14, 2) // Puede ser negativo si hay saldo a favor
+  monto    Decimal        @db.Decimal(14, 2) // Puede ser negativo (crédito)
   nota     String?
   pedido   Pedido         @relation(fields: [pedidoId], references: [id])
 }
 
 model GastoRecepcion {
-  id          Int      @id @default(autoincrement())
-  pedidoId    Int
-  concepto    String   // flete, seguro, aduana, agente, etc.
-  monto       Decimal  @db.Decimal(14, 2)
-  aproximado  Boolean  @default(false)
-  pedido      Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  pedidoId   Int
+  concepto   String   // flete, seguro, aduana, agente, almacenaje...
+  monto      Decimal  @db.Decimal(14, 2)
+  aproximado Boolean  @default(false)
+  pedido     Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 }
 
 // ------------------------------------------
-// 7. Caja y Gastos
+// 7. Caja, Cuentas de Banco y Gastos
 // ------------------------------------------
+
+model CuentaBanco { // Cuentas de banco en lempiras de Caja
+  id            Int     @id @default(autoincrement())
+  nombre        String
+  saldoLempiras Decimal @default(0) @db.Decimal(14, 2)
+  orden         Int     @default(1)
+}
 
 model CategoriaGasto {
-  id          Int               @id @default(autoincrement())
-  nombre      String
-  grupo       GrupoGasto
-  tipo        TipoGasto
-  montoFijo   Decimal?          @db.Decimal(14, 2)
-  activaDesde DateTime?
-  activaHasta DateTime?
-  esSistema   Boolean           @default(false) // Devoluciones / Cambios automáticos
-  fijosMes    GastoFijoMes[]
-  movimientos MovimientoGasto[]
+  id                 Int                @id @default(autoincrement())
+  nombre             String
+  grupo              GrupoGasto
+  tipo               TipoGasto
+  presupuestoMensual Decimal?           @db.Decimal(14, 2) // Para variables en meses futuros
+  montoFijo          Decimal?           @db.Decimal(14, 2)
+  activaDesde        DateTime?
+  activaHasta        DateTime?
+  esSistema          Boolean            @default(false)    // Devoluciones/cambios
+  fijosMes           GastoFijoMes[]
+  montosVigentes     MontoFijoVigente[]
+  movimientos        MovimientoGasto[]
 }
 
-model GastoFijoMes { // Generados automáticamente por mes
+model MontoFijoVigente { // Cambios de un gasto fijo "en adelante"
+  id          Int            @id @default(autoincrement())
+  categoriaId Int
+  desdeAnio   Int
+  desdeMes    Int
+  monto       Decimal        @db.Decimal(14, 2)
+  creadoEn    DateTime       @default(now())
+  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+
+  @@index([categoriaId, desdeAnio, desdeMes])
+}
+
+model GastoFijoMes { // Monto fijo de un mes específico ("solo este mes" o fijado al cerrar mes)
   id          Int            @id @default(autoincrement())
   categoriaId Int
   anio        Int
   mes         Int
   monto       Decimal        @db.Decimal(14, 2)
-  real        Boolean        @default(false) // true al cerrar mes
-  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id])
+  real        Boolean        @default(false)
+  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
 
   @@unique([categoriaId, anio, mes])
 }
@@ -400,28 +440,30 @@ model MovimientoGasto { // Gastos variables
 }
 
 model SaldoCaja { // Registro único (id = 1)
-  id                 Int      @id @default(1)
-  efectivo           Decimal  @default(0) @db.Decimal(14, 2)
-  cheques            Decimal  @default(0) @db.Decimal(14, 2)
-  bancosUsd          Decimal  @default(0) @db.Decimal(14, 2)
-  bancosUsdValorL    Decimal  @default(0) @db.Decimal(14, 2)
-  actualizadoEn      DateTime @updatedAt
+  id              Int      @id @default(1)
+  efectivo        Decimal  @default(0) @db.Decimal(14, 2)
+  cheques         Decimal  @default(0) @db.Decimal(14, 2)
+  bancosUsd       Decimal  @default(0) @db.Decimal(14, 2)
+  bancosUsdValorL Decimal  @default(0) @db.Decimal(14, 2)
+  actualizadoEn   DateTime @updatedAt
 }
 
 model Anio {
-  anio                     Int      @id
-  metaAnual                Decimal  @default(0) @db.Decimal(14, 2)
-  porcentajeBrutoAnterior  Decimal? @db.Decimal(8, 6)
-  cerrado                  Boolean  @default(false)
-  multiplicadoresIniciales Json?    // Snapshot al inicio
+  anio                     Int       @id
+  metaAnual                Decimal   @default(0) @db.Decimal(14, 2)
+  porcentajeBrutoAnterior  Decimal?  @db.Decimal(8, 6)
+  cerrado                  Boolean   @default(false)
+  cerradoEn                DateTime?
+  multiplicadoresIniciales Json?     // Snapshot al inicio por categoría
 }
 
-model MesContable { // PE y meta se fijan el día 1
-  id      Int     @id @default(autoincrement())
-  anio    Int
-  mes     Int
-  peMes   Decimal @db.Decimal(14, 2)
-  metaMes Decimal @db.Decimal(14, 2)
+model MesContable { // Cierre de mes: PE y meta se fijan el día 1 (y al cerrar el arranque)
+  id       Int      @id @default(autoincrement())
+  anio     Int
+  mes      Int
+  peMes    Decimal  @db.Decimal(14, 2)
+  metaMes  Decimal  @db.Decimal(14, 2)
+  fijadoEn DateTime @default(now())
 
   @@unique([anio, mes])
 }
@@ -441,17 +483,7 @@ model VentaBase { // Año base histórico (2026)
   @@unique([productoId, anio, mes])
 }
 
-model PeriodoSinStock { // Abre cuando stock llega a 0, cierra cuando reingresa
-  id         Int       @id @default(autoincrement())
-  productoId Int
-  desde      DateTime
-  hasta      DateTime? // null = sigue sin stock
-  producto   Producto  @relation(fields: [productoId], references: [id])
-
-  @@index([productoId, desde])
-}
-
-model MesSinStock { // Registro del cierre de mes para códigos en cero
+model MesSinStock { // Se registra cuando el stock llega a 0 en cualquier momento del mes, o el día 1 si empieza en 0
   id         Int      @id @default(autoincrement())
   productoId Int
   anio       Int
@@ -461,15 +493,25 @@ model MesSinStock { // Registro del cierre de mes para códigos en cero
   @@unique([productoId, anio, mes])
 }
 
+model PeriodoSinStock { // Historial de fechas en que estuvo en 0
+  id         Int       @id @default(autoincrement())
+  productoId Int
+  desde      DateTime
+  hasta      DateTime?
+  producto   Producto  @relation(fields: [productoId], references: [id])
+
+  @@index([productoId, desde])
+}
+
 model Historial { // Bitácora de cambios para auditoría
-  id         Int      @id @default(autoincrement())
-  entidad    String
-  entidadId  String
-  campo      String
-  antes      String?
-  despues    String?
-  motivo     String?
-  fecha      DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  entidad   String
+  entidadId String
+  campo     String
+  antes     String?
+  despues   String?
+  motivo    String?
+  fecha     DateTime @default(now())
 
   @@index([entidad, entidadId])
 }
