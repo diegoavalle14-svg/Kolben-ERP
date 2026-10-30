@@ -39,6 +39,7 @@ enum MedioAbono {
   TRANSFERENCIA
   CHEQUE
   DEVOLUCION
+  CARGA_INICIAL
 }
 
 enum GrupoGasto {
@@ -67,25 +68,25 @@ model Configuracion {
   porcentajeIsv  Decimal  @default(15) @db.Decimal(5, 2)
   correoRespaldo String?
   diaRespaldo    Int      @default(1)
-  pctMesSinStock Decimal  @default(100) @db.Decimal(5, 2)
+  portadaPath    String?
+  paletaCatalogo String   @default("SISTEMA_KOLBEN")
 }
 
 model Banco {
-  id                Int     @id @default(autoincrement())
+  id                Int    @id @default(autoincrement())
   nombre            String
   cuentaEnmascarada String
   orden             Int
-  saldoLempiras     Decimal @default(0) @db.Decimal(14, 2)
 }
 
 // ---------- Listas ----------
 model Categoria {
-  id        Int        @id @default(autoincrement())
-  nombre    String     @unique
-  orden     Int
-  empaque   Int        @default(10)
-  multiplicador Decimal  @default(2.0) @db.Decimal(6, 3)
-  productos Producto[]
+  id            Int        @id @default(autoincrement())
+  nombre        String     @unique
+  orden         Int
+  empaque       Int        @default(10)
+  multiplicador Decimal    @default(2.0) @db.Decimal(6, 3)
+  productos     Producto[]
 }
 
 model Marca {
@@ -114,26 +115,27 @@ model Ciudad {
 
 // ---------- Productos y stock ----------
 model Producto {
-  id               Int               @id @default(autoincrement())
-  codigo           String            @unique
-  categoriaId      Int
-  marcaId          Int
-  descripcion      String
-  cbmUnidad        Decimal           @default(0) @db.Decimal(8, 4)
-  fotoPath         String?
-  activo           Boolean           @default(true)
-  posicion         Int
-  categoria        Categoria         @relation(fields: [categoriaId], references: [id])
-  marca            Marca             @relation(fields: [marcaId], references: [id])
-  lotes            Lote[]
-  ajustes          AjusteStock[]
-  precios          PrecioCliente[]
-  lineasProforma   LineaProforma[]
-  lineasFactura    LineaFactura[]
-  lineasPedido     LineaPedido[]
-  ventasBase       VentaBase[]
-  mesesSinStock    MesSinStock[]
-  periodosSinStock PeriodoSinStock[]
+  id                  Int                  @id @default(autoincrement())
+  codigo              String               @unique
+  categoriaId         Int
+  marcaId             Int
+  descripcion         String
+  cbmUnidad           Decimal              @default(0) @db.Decimal(8, 4)
+  fotoPath            String?
+  activo              Boolean              @default(true)
+  posicion            Int
+  categoria           Categoria            @relation(fields: [categoriaId], references: [id])
+  marca               Marca                @relation(fields: [marcaId], references: [id])
+  lotes               Lote[]
+  ajustes             AjusteStock[]
+  precios             PrecioCliente[]
+  lineasProforma      LineaProforma[]
+  lineasFactura       LineaFactura[]
+  lineasPedido        LineaPedido[]
+  ventasBase          VentaBase[]
+  mesesSinStock       MesSinStock[]
+  periodosSinStock    PeriodoSinStock[]
+  borradorCalculadora BorradorCalculadora?
 
   @@index([categoriaId, marcaId, posicion])
 }
@@ -269,24 +271,40 @@ model LoteConsumo {
   loteId         Int
   cantidad       Int
   costoUnidad    Decimal      @db.Decimal(14, 4)
+  fobUnidad      Decimal      @default(0) @db.Decimal(14, 4)
   lineaFactura   LineaFactura @relation(fields: [lineaFacturaId], references: [id], onDelete: Cascade)
   lote           Lote         @relation(fields: [loteId], references: [id])
 }
 
 model Abono {
-  id                   Int         @id @default(autoincrement())
+  id                   Int        @id @default(autoincrement())
   facturaId            Int
   fecha                DateTime
-  monto                Decimal     @db.Decimal(14, 2)
+  monto                Decimal    @db.Decimal(14, 2)
   numeroRecibo         String?
   medio                MedioAbono
   chequePendienteHasta DateTime?
-  factura              Factura     @relation(fields: [facturaId], references: [id])
+  factura              Factura    @relation(fields: [facturaId], references: [id])
 
   @@index([facturaId])
 }
 
-// ---------- Compras ----------
+// ---------- Compras y Calculadora ----------
+model ParametrosCompra {
+  id                   Int     @id @default(1)
+  mesesCiclo           Int[]   @default([3, 9])
+  porcentajeStockExtra Decimal @default(15) @db.Decimal(5, 2)
+}
+
+model BorradorCalculadora {
+  id           Int      @id @default(autoincrement())
+  productoId   Int      @unique
+  ajuste       Int      @default(0)
+  fobUnidad    Decimal  @db.Decimal(14, 4)
+  escritoAMano Boolean  @default(false)
+  producto     Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+}
+
 model Pedido {
   id               Int              @id @default(autoincrement())
   numero           Int              @unique
@@ -335,18 +353,39 @@ model GastoRecepcion {
   pedido     Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 }
 
-// ---------- Caja y gastos ----------
+// ---------- Caja, cuentas de banco y gastos ----------
+model CuentaBanco {
+  id            Int     @id @default(autoincrement())
+  nombre        String
+  saldoLempiras Decimal @default(0) @db.Decimal(14, 2)
+  orden         Int     @default(1)
+}
+
 model CategoriaGasto {
-  id          Int               @id @default(autoincrement())
-  nombre      String
-  grupo       GrupoGasto
-  tipo        TipoGasto
-  montoFijo   Decimal?          @db.Decimal(14, 2)
-  activaDesde DateTime?
-  activaHasta DateTime?
-  esSistema   Boolean           @default(false)
-  fijosMes    GastoFijoMes[]
-  movimientos MovimientoGasto[]
+  id                 Int                @id @default(autoincrement())
+  nombre             String
+  grupo              GrupoGasto
+  tipo               TipoGasto
+  presupuestoMensual Decimal?           @db.Decimal(14, 2)
+  montoFijo          Decimal?           @db.Decimal(14, 2)
+  activaDesde        DateTime?
+  activaHasta        DateTime?
+  esSistema          Boolean            @default(false)
+  fijosMes           GastoFijoMes[]
+  montosVigentes     MontoFijoVigente[]
+  movimientos        MovimientoGasto[]
+}
+
+model MontoFijoVigente {
+  id          Int            @id @default(autoincrement())
+  categoriaId Int
+  desdeAnio   Int
+  desdeMes    Int
+  monto       Decimal        @db.Decimal(14, 2)
+  creadoEn    DateTime       @default(now())
+  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+
+  @@index([categoriaId, desdeAnio, desdeMes])
 }
 
 model GastoFijoMes {
@@ -356,7 +395,7 @@ model GastoFijoMes {
   mes         Int
   monto       Decimal        @db.Decimal(14, 2)
   real        Boolean        @default(false)
-  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id])
+  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
 
   @@unique([categoriaId, anio, mes])
 }
@@ -380,19 +419,21 @@ model SaldoCaja {
 }
 
 model Anio {
-  anio                     Int      @id
-  metaAnual                Decimal  @default(0) @db.Decimal(14, 2)
-  porcentajeBrutoAnterior  Decimal? @db.Decimal(8, 6)
-  cerrado                  Boolean  @default(false)
+  anio                     Int       @id
+  metaAnual                Decimal   @default(0) @db.Decimal(14, 2)
+  porcentajeBrutoAnterior  Decimal?  @db.Decimal(8, 6)
+  cerrado                  Boolean   @default(false)
+  cerradoEn                DateTime?
   multiplicadoresIniciales Json?
 }
 
 model MesContable {
-  id      Int     @id @default(autoincrement())
-  anio    Int
-  mes     Int
-  peMes   Decimal @db.Decimal(14, 2)
-  metaMes Decimal @db.Decimal(14, 2)
+  id       Int      @id @default(autoincrement())
+  anio     Int
+  mes      Int
+  peMes    Decimal  @db.Decimal(14, 2)
+  metaMes  Decimal  @db.Decimal(14, 2)
+  fijadoEn DateTime @default(now())
 
   @@unique([anio, mes])
 }
@@ -409,16 +450,6 @@ model VentaBase {
   @@unique([productoId, anio, mes])
 }
 
-model PeriodoSinStock {
-  id         Int       @id @default(autoincrement())
-  productoId Int
-  desde      DateTime
-  hasta      DateTime?
-  producto   Producto  @relation(fields: [productoId], references: [id])
-
-  @@index([productoId, desde])
-}
-
 model MesSinStock {
   id         Int      @id @default(autoincrement())
   productoId Int
@@ -427,6 +458,16 @@ model MesSinStock {
   producto   Producto @relation(fields: [productoId], references: [id])
 
   @@unique([productoId, anio, mes])
+}
+
+model PeriodoSinStock {
+  id         Int       @id @default(autoincrement())
+  productoId Int
+  desde      DateTime
+  hasta      DateTime?
+  producto   Producto  @relation(fields: [productoId], references: [id])
+
+  @@index([productoId, desde])
 }
 
 model Historial {

@@ -9,7 +9,8 @@ interface Config {
   porcentajeIsv: string | number;
   correoRespaldo: string | null;
   diaRespaldo: number;
-  pctMesSinStock: string | number;
+  portadaPath?: string | null;
+  paletaCatalogo?: string;
 }
 
 interface Banco {

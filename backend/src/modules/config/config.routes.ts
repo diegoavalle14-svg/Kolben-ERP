@@ -16,7 +16,8 @@ const configSchema = z.object({
   porcentajeIsv: z.coerce.number().min(0).max(100),
   correoRespaldo: z.string().email().nullable().optional().or(z.literal("")),
   diaRespaldo: z.coerce.number().int().min(1).max(7),
-  pctMesSinStock: z.coerce.number().min(0).max(100).optional(),
+  portadaPath: z.string().trim().nullable().optional(),
+  paletaCatalogo: z.string().trim().optional(),
 });
 
 const bancoSchema = z.object({

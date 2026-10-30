@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Pencil, Plus, Upload } from 'lucide-react';
 import { api } from '../lib/api';
 
 /* ───────── Tipos ───────── */
-interface Categoria { id: number; nombre: string; orden: number; multiplicador: number }
+interface Categoria { id: number; nombre: string; orden: number; empaque: number; multiplicador: number }
 interface Marca { id: number; nombre: string; orden: number; logoPath: string | null }
 interface Fila {
   id: number; codigo: string; descripcion: string; categoriaId: number; marcaId: number;
@@ -12,7 +12,7 @@ interface Fila {
 }
 interface Totales { codigos: number; valorCosto: number; valorVenta: number }
 interface Grupo { categoria: { id: number; nombre: string; orden: number }; productos: Fila[]; totales: Totales }
-interface Datos { grupos: Grupo[]; total: Totales }
+interface Datos { grupos: Grupo[]; total: Totales; enArranque?: boolean }
 type Vista = 'tabla' | 'listas' | 'ordenar' | 'form';
 
 const LIMITE_GRUPO = 8;
@@ -136,6 +136,14 @@ export default function Productos() {
             expandidos={expandidos}
             setExpandidos={setExpandidos}
             onEditar={(id) => { setEditando(id); setVista('form'); }}
+            onMover={async (id, dir) => {
+              try {
+                await api(`/productos/${id}/mover`, { method: 'POST', body: JSON.stringify({ dir }) });
+                await cargar();
+              } catch (e) {
+                flash('error', (e as Error).message);
+              }
+            }}
           />
         </>
       )}
@@ -159,6 +167,7 @@ export default function Productos() {
           id={editando}
           categorias={categorias}
           marcas={marcas}
+          enArranque={datos?.enArranque ?? true}
           onCancelar={() => setVista('tabla')}
           onGuardado={async (t) => { flash('ok', t); await cargar(); setVista('tabla'); }}
           flash={flash}
@@ -170,12 +179,13 @@ export default function Productos() {
 
 /* ───────── Tabla ───────── */
 function Tabla({
-  datos, expandidos, setExpandidos, onEditar,
+  datos, expandidos, setExpandidos, onEditar, onMover,
 }: {
   datos: Datos | null;
   expandidos: Record<number, boolean>;
   setExpandidos: (v: Record<number, boolean>) => void;
   onEditar: (id: number) => void;
+  onMover: (id: number, dir: 'up' | 'down') => void;
 }) {
   if (!datos) return <div className="p-6 text-sm text-kolben-muted">Cargando productos...</div>;
   const th = 'px-3 py-2 text-left text-[9px] font-semibold uppercase tracking-[0.08em] text-kolben-muted';
@@ -184,6 +194,7 @@ function Tabla({
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr className="border-b border-kolben-line">
+            <th className="w-9 px-2 py-2" />
             <th className={th}>Foto</th>
             <th className={th}>Código</th>
             <th className={th}>Descripción</th>
@@ -197,7 +208,7 @@ function Tabla({
         </thead>
         <tbody>
           {datos.grupos.length === 0 && (
-            <tr><td colSpan={9} className="p-8 text-center text-kolben-muted">No hay códigos con esos filtros.</td></tr>
+            <tr><td colSpan={10} className="p-8 text-center text-kolben-muted">No hay códigos con esos filtros.</td></tr>
           )}
           {datos.grupos.map((g) => {
             const abierto = expandidos[g.categoria.id];
@@ -205,7 +216,7 @@ function Tabla({
             return (
               <GrupoFilas key={g.categoria.id}>
                 <tr className="bg-kolben-bg/70">
-                  <td colSpan={6} className="px-3 py-2 text-[11px] font-bold uppercase tracking-[0.06em] text-kolben-ink">
+                  <td colSpan={7} className="px-3 py-2 text-[11px] font-bold uppercase tracking-[0.06em] text-kolben-ink">
                     {g.categoria.orden} · {g.categoria.nombre}
                     <span className="ml-2 font-medium normal-case tracking-normal text-kolben-muted">{g.totales.codigos} códigos</span>
                   </td>
@@ -221,6 +232,26 @@ function Tabla({
                       onClick={() => onEditar(p.id)}
                       className="cursor-pointer border-t border-kolben-line transition hover:bg-white"
                     >
+                      <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center text-kolben-muted">
+                          <button
+                            type="button"
+                            title="Subir en su marca"
+                            onClick={() => onMover(p.id, 'up')}
+                            className="rounded p-0.5 hover:bg-kolben-bg hover:text-kolben-ink"
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            title="Bajar en su marca"
+                            onClick={() => onMover(p.id, 'down')}
+                            className="rounded p-0.5 hover:bg-kolben-bg hover:text-kolben-ink"
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                        </div>
+                      </td>
                       <td className="px-3 py-1.5">
                         {p.fotoPath ? (
                           <img src={urlImg(p.fotoPath)!} alt={p.codigo} className="h-9 w-9 rounded-md object-cover" />
@@ -250,7 +281,7 @@ function Tabla({
                 })}
                 {g.productos.length > LIMITE_GRUPO && (
                   <tr className="border-t border-kolben-line">
-                    <td colSpan={9} className="px-3 py-1.5">
+                    <td colSpan={10} className="px-3 py-1.5">
                       <button
                         className="text-[11px] font-semibold text-kolben-ink hover:underline"
                         onClick={() => setExpandidos({ ...expandidos, [g.categoria.id]: !abierto })}
@@ -264,7 +295,7 @@ function Tabla({
             );
           })}
           <tr className="border-t-2 border-kolben-line bg-[#f3ecd9]">
-            <td colSpan={6} className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em]">
+            <td colSpan={7} className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em]">
               Total inventario <span className="ml-2 font-medium normal-case tracking-normal text-kolben-muted">· va al Resumen</span>
             </td>
             <td className="px-3 py-2.5 text-right font-bold tabular-nums">{money(datos.total.valorCosto)}</td>
@@ -293,6 +324,7 @@ function Listas({
   const [nuevaMarca, setNuevaMarca] = useState('');
   const [editCat, setEditCat] = useState<number | null>(null);
   const [editNombre, setEditNombre] = useState('');
+  const [editEmpaque, setEditEmpaque] = useState(10);
   const [editMult, setEditMult] = useState('');
   const [editMarca, setEditMarca] = useState<number | null>(null);
   const [logoPara, setLogoPara] = useState<number | null>(null);
@@ -327,6 +359,16 @@ function Listas({
                 {editCat === c.id ? (
                   <>
                     <input className={`${input} !py-1`} value={editNombre} onChange={(e) => setEditNombre(e.target.value)} />
+                    <select
+                      className={`${input} !w-24 !py-1`}
+                      title="Empaque de fábrica (10 / 20 / 50)"
+                      value={editEmpaque}
+                      onChange={(e) => setEditEmpaque(Number(e.target.value))}
+                    >
+                      <option value={10}>10 u</option>
+                      <option value={20}>20 u</option>
+                      <option value={50}>50 u</option>
+                    </select>
                     <input
                       className={`${input} !w-20 !py-1`}
                       title="Multiplicador sobre FOB (valor a precio de venta)"
@@ -336,7 +378,10 @@ function Listas({
                     <button
                       className={btnSolid}
                       onClick={() => run(async () => {
-                        await api(`/categorias/${c.id}`, { method: 'PUT', body: JSON.stringify({ nombre: editNombre, multiplicador: Number(editMult) }) });
+                        await api(`/categorias/${c.id}`, {
+                          method: 'PUT',
+                          body: JSON.stringify({ nombre: editNombre, empaque: editEmpaque, multiplicador: Number(editMult) }),
+                        });
                         setEditCat(null);
                       })}
                     >OK</button>
@@ -344,10 +389,11 @@ function Listas({
                 ) : (
                   <>
                     <span className="flex-1 text-[13px] font-semibold">{c.nombre}</span>
+                    <span className="text-[10px] text-kolben-muted" title="Empaque de fábrica">caja {c.empaque ?? 10}</span>
                     <span className="text-[10px] text-kolben-muted" title="Multiplicador sobre FOB">× {c.multiplicador}</span>
                     <button className={flecha} aria-label="Subir" onClick={() => run(() => api(`/categorias/${c.id}/mover`, { method: 'POST', body: JSON.stringify({ dir: 'up' }) }))}><ArrowUp size={14} /></button>
                     <button className={flecha} aria-label="Bajar" onClick={() => run(() => api(`/categorias/${c.id}/mover`, { method: 'POST', body: JSON.stringify({ dir: 'down' }) }))}><ArrowDown size={14} /></button>
-                    <button className={flecha} aria-label="Editar" onClick={() => { setEditCat(c.id); setEditNombre(c.nombre); setEditMult(String(c.multiplicador)); }}><Pencil size={14} /></button>
+                    <button className={flecha} aria-label="Editar" onClick={() => { setEditCat(c.id); setEditNombre(c.nombre); setEditEmpaque(c.empaque ?? 10); setEditMult(String(c.multiplicador)); }}><Pencil size={14} /></button>
                   </>
                 )}
               </li>
@@ -504,9 +550,9 @@ function Ordenar({
 
 /* ───────── Formulario Nuevo / Editar código ───────── */
 function Formulario({
-  id, categorias, marcas, onCancelar, onGuardado, flash,
+  id, categorias, marcas, enArranque, onCancelar, onGuardado, flash,
 }: {
-  id: number | null; categorias: Categoria[]; marcas: Marca[];
+  id: number | null; categorias: Categoria[]; marcas: Marca[]; enArranque: boolean;
   onCancelar: () => void; onGuardado: (t: string) => Promise<void>;
   flash: (t: 'ok' | 'error', s: string) => void;
 }) {
@@ -520,6 +566,7 @@ function Formulario({
   const [previa, setPrevia] = useState<string | null>(null);
   const [totalGrupo, setTotalGrupo] = useState(0);
   const [guardando, setGuardando] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -588,7 +635,6 @@ function Formulario({
   };
 
   const eliminar = async () => {
-    if (!confirm(`¿Eliminar el código ${f.codigo}? Esta acción no se puede deshacer.`)) return;
     try {
       await api(`/productos/${id}`, { method: 'DELETE' });
       await onGuardado('Código eliminado');
@@ -668,7 +714,7 @@ function Formulario({
             <div className="mt-1 text-[10px] text-kolben-muted">una línea por cosa · Enter para bajar · texto libre, se escribe a mano</div>
           </div>
 
-          {nuevo && (
+          {nuevo && enArranque && (
             <div className="rounded-xl border border-kolben-line bg-[#f3ecd9] p-4">
               <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em]">Solo en arranque <span className="font-normal normal-case tracking-normal text-kolben-muted">· crea el lote Inicial</span></div>
               <div className="grid grid-cols-3 gap-3">
@@ -707,8 +753,14 @@ function Formulario({
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-kolben-line pt-4">
-        {nuevo ? <span /> : (
-          <button className="text-[11px] font-bold uppercase tracking-[0.06em] text-kolben-red hover:underline" onClick={eliminar}>
+        {nuevo ? <span /> : confirmandoEliminar ? (
+          <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs">
+            <span className="font-semibold text-rose-800">¿Eliminar el código {f.codigo}? No se puede deshacer.</span>
+            <button type="button" className="rounded bg-rose-600 px-2.5 py-1 text-[10px] font-bold uppercase text-white hover:bg-rose-700" onClick={eliminar}>Sí, eliminar</button>
+            <button type="button" className="rounded px-2 py-1 text-[10px] font-bold uppercase text-kolben-muted hover:text-kolben-text" onClick={() => setConfirmandoEliminar(false)}>Cancelar</button>
+          </div>
+        ) : (
+          <button type="button" className="text-[11px] font-bold uppercase tracking-[0.06em] text-kolben-red hover:underline" onClick={() => setConfirmandoEliminar(true)}>
             Eliminar <span className="font-normal normal-case tracking-normal text-kolben-muted">· solo si nunca tuvo ventas, lotes ni pedidos</span>
           </button>
         )}

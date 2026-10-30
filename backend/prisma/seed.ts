@@ -57,7 +57,23 @@ async function main() {
         },
       });
     } else {
-      await prisma.periodoSinStock.create({ data: { productoId: p.id, desde: new Date() } });
+      const ahora = new Date();
+      await prisma.periodoSinStock.create({ data: { productoId: p.id, desde: ahora } });
+      await prisma.mesSinStock.upsert({
+        where: {
+          productoId_anio_mes: {
+            productoId: p.id,
+            anio: ahora.getUTCFullYear(),
+            mes: ahora.getUTCMonth() + 1,
+          },
+        },
+        update: {},
+        create: {
+          productoId: p.id,
+          anio: ahora.getUTCFullYear(),
+          mes: ahora.getUTCMonth() + 1,
+        },
+      });
     }
   }
   console.log("Seed de productos listo (datos de ejemplo, no reales).");

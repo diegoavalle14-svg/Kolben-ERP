@@ -68,8 +68,24 @@ async function historial(
 
 const categoriaSchema = z.object({
   nombre: z.string().trim().min(1),
+  empaque: z.coerce
+    .number()
+    .int()
+    .refine((v) => [10, 20, 50].includes(v), "El empaque debe ser 10, 20 o 50")
+    .optional(),
   multiplicador: z.coerce.number().min(0.001).max(999).optional(),
 });
+
+function mesActualHonduras(d = new Date()): { anio: number; mes: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Tegucigalpa",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(d);
+  const anio = Number(parts.find((p) => p.type === "year")?.value ?? d.getUTCFullYear());
+  const mes = Number(parts.find((p) => p.type === "month")?.value ?? d.getUTCMonth() + 1);
+  return { anio, mes };
+}
 
 categoriasRouter.get(
   "/",
@@ -211,13 +227,18 @@ const arranqueSchema = z.object({
 });
 
 type ProdConLotes = Prisma.ProductoGetPayload<{
-  include: { lotes: true; categoria: true; marca: true };
+  include: {
+    lotes: true;
+    categoria: true;
+    marca: true;
+    lineasProforma: { select: { cantidad: true } };
+  };
 }>;
 
 function resumen(p: ProdConLotes) {
   const lotes = p.lotes.filter((l) => l.quedan > 0);
   const stock = lotes.reduce((s, l) => s + l.quedan, 0);
-  const apartado = 0; // Se calculará con proformas pendientes (etapa de ventas)
+  const apartado = p.lineasProforma.reduce((s, lp) => s + lp.cantidad, 0);
   const valorCosto = lotes.reduce((s, l) => s + l.quedan * num(l.costoUnidad), 0);
   const mult = num(p.categoria.multiplicador);
   const valorVenta = lotes.reduce((s, l) => s + l.quedan * num(l.fobUnidad) * mult, 0);
@@ -243,6 +264,16 @@ function resumen(p: ProdConLotes) {
   };
 }
 
+const includeProd = {
+  lotes: true,
+  categoria: true,
+  marca: true,
+  lineasProforma: {
+    where: { proforma: { estado: "PENDIENTE" as const } },
+    select: { cantidad: true },
+  },
+};
+
 productosRouter.get(
   "/",
   wrap(async (req, res) => {
@@ -266,12 +297,13 @@ productosRouter.get(
         : {}),
     };
 
-    const [categorias, productos] = await Promise.all([
+    const [categorias, productos, facturasReales] = await Promise.all([
       prisma.categoria.findMany({ orderBy: { orden: "asc" } }),
       prisma.producto.findMany({
         where,
-        include: { lotes: true, categoria: true, marca: true },
+        include: includeProd,
       }),
+      prisma.factura.count({ where: { cargaInicial: false } }),
     ]);
 
     const filas = productos
@@ -300,7 +332,7 @@ productosRouter.get(
       })
       .filter((g) => g.productos.length > 0);
 
-    res.json({ grupos, total: suma(filas) });
+    res.json({ grupos, total: suma(filas), enArranque: facturasReales === 0 });
   })
 );
 
@@ -309,7 +341,7 @@ productosRouter.get(
   wrap(async (req, res) => {
     const p = await prisma.producto.findUnique({
       where: { id: idOf(req) },
-      include: { lotes: true, categoria: true, marca: true },
+      include: includeProd,
     });
     if (!p) throw new HttpError(404, "Código no encontrado");
     const inicial = p.lotes.find((l) => l.esInicial);
@@ -334,6 +366,12 @@ productosRouter.post(
     const producto = await prisma.$transaction(async (tx) => {
       const existe = await tx.producto.findUnique({ where: { codigo: data.codigo } });
       if (existe) throw new HttpError(409, "Ya existe un código con ese nombre");
+      const facturasReales = await tx.factura.count({ where: { cargaInicial: false } });
+      const enArranque = facturasReales === 0;
+      if (!enArranque && arr.stockInicial > 0) {
+        throw new HttpError(409, "El stock inicial solo se puede cargar durante el arranque");
+      }
+
       const total = await tx.producto.count({
         where: { categoriaId: data.categoriaId, marcaId: data.marcaId },
       });
@@ -344,7 +382,7 @@ productosRouter.post(
         data: { posicion: { increment: 1 } },
       });
       const p = await tx.producto.create({ data: { ...data, posicion: pos } });
-      if (arr.stockInicial > 0) {
+      if (enArranque && arr.stockInicial > 0) {
         await tx.lote.create({
           data: {
             productoId: p.id,
@@ -358,7 +396,14 @@ productosRouter.post(
           },
         });
       } else {
-        await tx.periodoSinStock.create({ data: { productoId: p.id, desde: new Date() } });
+        const ahora = new Date();
+        const { anio, mes } = mesActualHonduras(ahora);
+        await tx.periodoSinStock.create({ data: { productoId: p.id, desde: ahora } });
+        await tx.mesSinStock.upsert({
+          where: { productoId_anio_mes: { productoId: p.id, anio, mes } },
+          update: {},
+          create: { productoId: p.id, anio, mes },
+        });
       }
       await historial(tx, "Producto", p.id, { creado: [null, p.codigo] });
       return p;
@@ -375,9 +420,33 @@ productosRouter.put(
     await prisma.$transaction(async (tx) => {
       const antes = await tx.producto.findUnique({ where: { id } });
       if (!antes) throw new HttpError(404, "Código no encontrado");
-      if (data.codigo !== antes.codigo) {
+      if ( data.codigo !== antes.codigo) {
         const dup = await tx.producto.findUnique({ where: { codigo: data.codigo } });
         if (dup) throw new HttpError(409, "Ya existe un código con ese nombre");
+      }
+      if (antes.activo && !data.activo) {
+        const lotesStock = await tx.lote.aggregate({
+          where: { productoId: id, quedan: { gt: 0 } },
+          _sum: { quedan: true },
+        });
+        const stockActual = lotesStock._sum.quedan ?? 0;
+        const apartadoAgg = await tx.lineaProforma.aggregate({
+          where: { productoId: id, proforma: { estado: "PENDIENTE" } },
+          _sum: { cantidad: true },
+        });
+        const apartadoActual = apartadoAgg._sum.cantidad ?? 0;
+        const enPedidoActivo = await tx.lineaPedido.count({
+          where: {
+            productoId: id,
+            pedido: { estado: { in: ["EN_PRODUCCION", "EN_CAMINO"] } },
+          },
+        });
+        if (stockActual > 0 || apartadoActual > 0 || enPedidoActivo > 0) {
+          throw new HttpError(
+            409,
+            "Solo se puede inactivar un código con stock 0, sin unidades apartadas y sin pedido activo"
+          );
+        }
       }
       const grupoCambia = data.categoriaId !== antes.categoriaId || data.marcaId !== antes.marcaId;
       let posicion = antes.posicion;
@@ -480,6 +549,30 @@ productosRouter.post(
   })
 );
 
+productosRouter.post(
+  "/:id/mover",
+  wrap(async (req, res) => {
+    const id = idOf(req);
+    const { dir } = moverSchema.parse(req.body);
+    await prisma.$transaction(async (tx) => {
+      const p = await tx.producto.findUnique({ where: { id } });
+      if (!p) throw new HttpError(404, "Código no encontrado");
+      const grupo = await tx.producto.findMany({
+        where: { categoriaId: p.categoriaId, marcaId: p.marcaId },
+        orderBy: [{ posicion: "asc" }, { id: "asc" }],
+      });
+      const i = grupo.findIndex((x) => x.id === id);
+      const j = dir === "up" ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= grupo.length) return;
+      [grupo[i], grupo[j]] = [grupo[j], grupo[i]];
+      for (let idx = 0; idx < grupo.length; idx++) {
+        await tx.producto.update({ where: { id: grupo[idx].id }, data: { posicion: idx + 1 } });
+      }
+    });
+    res.json({ ok: true });
+  })
+);
+
 productosRouter.delete(
   "/:id",
   wrap(async (req, res) => {
@@ -490,11 +583,15 @@ productosRouter.delete(
     const ventas =
       (await prisma.lineaFactura.count({ where: { productoId: id } })) +
       (await prisma.lineaProforma.count({ where: { productoId: id } })) +
-      (await prisma.lineaPedido.count({ where: { productoId: id } }));
+      (await prisma.lineaPedido.count({ where: { productoId: id } })) +
+      (await prisma.ajusteStock.count({ where: { productoId: id } }));
     if (otrosLotes.length || ventas)
       throw new HttpError(409, "Tiene movimientos (lotes, ventas o pedidos); mejor inactívelo");
     await prisma.$transaction(async (tx) => {
+      await tx.mesSinStock.deleteMany({ where: { productoId: id } });
       await tx.periodoSinStock.deleteMany({ where: { productoId: id } });
+      await tx.precioCliente.deleteMany({ where: { productoId: id } });
+      await tx.ventaBase.deleteMany({ where: { productoId: id } });
       await tx.lote.deleteMany({ where: { productoId: id } });
       await tx.producto.delete({ where: { id } });
       await tx.producto.updateMany({
