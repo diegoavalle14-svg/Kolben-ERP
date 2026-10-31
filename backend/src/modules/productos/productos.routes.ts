@@ -6,6 +6,11 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import {
+  ajustarStockFifo,
+  editarLoteInicialFifo,
+  mesActualHonduras,
+} from "../../services/fifo.service.js";
 
 export const productosRouter = Router();
 export const categoriasRouter = Router();
@@ -75,17 +80,6 @@ const categoriaSchema = z.object({
     .optional(),
   multiplicador: z.coerce.number().min(0.001).max(999).optional(),
 });
-
-function mesActualHonduras(d = new Date()): { anio: number; mes: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Tegucigalpa",
-    year: "numeric",
-    month: "numeric",
-  }).formatToParts(d);
-  const anio = Number(parts.find((p) => p.type === "year")?.value ?? d.getUTCFullYear());
-  const mes = Number(parts.find((p) => p.type === "month")?.value ?? d.getUTCMonth() + 1);
-  return { anio, mes };
-}
 
 categoriasRouter.get(
   "/",
@@ -339,20 +333,134 @@ productosRouter.get(
 productosRouter.get(
   "/:id",
   wrap(async (req, res) => {
+    const id = idOf(req);
     const p = await prisma.producto.findUnique({
-      where: { id: idOf(req) },
-      include: includeProd,
+      where: { id },
+      include: {
+        ...includeProd,
+        lotes: {
+          include: { pedido: { select: { numero: true } } },
+          orderBy: [{ fechaRecibido: "asc" }, { id: "asc" }],
+        },
+        ajustes: {
+          orderBy: [{ fecha: "desc" }, { id: "desc" }],
+        },
+      },
     });
     if (!p) throw new HttpError(404, "Código no encontrado");
+
     const inicial = p.lotes.find((l) => l.esInicial);
+    // El lote que sale ahora es el más viejo con quedan > 0 (fechaRecibido ASC, id ASC)
+    const loteViejoActivo = p.lotes.find((l) => l.quedan > 0) ?? null;
+
+    const lotesDetalle = [...p.lotes]
+      .sort((a, b) => b.fechaRecibido.getTime() - a.fechaRecibido.getTime() || b.id - a.id)
+      .map((l) => ({
+        id: l.id,
+        esInicial: l.esInicial,
+        pedidoId: l.pedidoId,
+        pedidoNumero: l.pedido?.numero ?? null,
+        fechaRecibido: l.fechaRecibido,
+        cantidad: l.cantidad,
+        quedan: l.quedan,
+        vendidas: Math.max(0, l.cantidad - l.quedan),
+        fobUnidad: num(l.fobUnidad),
+        aduanaUnidad: num(l.aduanaUnidad),
+        costoUnidad: num(l.costoUnidad),
+      }));
+
+    const historialProducto = await prisma.historial.findMany({
+      where: { entidad: "Producto", entidadId: String(id) },
+      orderBy: [{ fecha: "desc" }, { id: "desc" }],
+      take: 30,
+    });
+
     res.json({
       producto: {
         ...resumen(p),
+        categoria: p.categoria.nombre,
+        costoSaleAhora: loteViejoActivo ? num(loteViejoActivo.costoUnidad) : null,
+        loteSaleAhora: loteViejoActivo
+          ? loteViejoActivo.esInicial
+            ? "lote Inicial"
+            : `lote pedido ${loteViejoActivo.pedido?.numero ?? loteViejoActivo.pedidoId ?? ""}`.trim()
+          : null,
         lotesInicial: inicial
-          ? { stock: inicial.cantidad, fob: num(inicial.fobUnidad), costo: num(inicial.costoUnidad) }
+          ? {
+              id: inicial.id,
+              stock: inicial.cantidad,
+              quedan: inicial.quedan,
+              vendidas: Math.max(0, inicial.cantidad - inicial.quedan),
+              fob: num(inicial.fobUnidad),
+              costo: num(inicial.costoUnidad),
+            }
           : null,
       },
+      lotes: lotesDetalle,
+      ajustes: p.ajustes,
+      historial: historialProducto,
     });
+  })
+);
+
+const ajusteSchema = z.object({
+  tipo: z.enum(["SALE", "ENTRA"]).optional(),
+  unidades: z.coerce.number().int(),
+  motivo: z.string().trim().min(1, "El motivo es obligatorio"),
+});
+
+productosRouter.post(
+  "/:id/ajustes",
+  wrap(async (req, res) => {
+    const productoId = idOf(req);
+    const body = ajusteSchema.parse(req.body);
+    const prod = await prisma.producto.findUnique({ where: { id: productoId } });
+    if (!prod) throw new HttpError(404, "Código no encontrado");
+
+    const abs = Math.abs(body.unidades);
+    if (abs === 0) throw new HttpError(400, "Las unidades deben ser mayores que 0");
+    const signedUnidades = body.tipo
+      ? body.tipo === "SALE"
+        ? -abs
+        : abs
+      : body.unidades;
+
+    const ajuste = await prisma.$transaction((tx) =>
+      ajustarStockFifo(tx, {
+        productoId,
+        unidades: signedUnidades,
+        motivo: body.motivo,
+      })
+    );
+
+    res.status(201).json({ ajuste });
+  })
+);
+
+const loteInicialSchema = z.object({
+  fobUnidad: z.coerce.number().min(0),
+  costoUnidad: z.coerce.number().min(0),
+  motivo: z.string().trim().min(1, "El motivo es obligatorio"),
+});
+
+productosRouter.put(
+  "/:id/lote-inicial",
+  wrap(async (req, res) => {
+    const productoId = idOf(req);
+    const body = loteInicialSchema.parse(req.body);
+    const prod = await prisma.producto.findUnique({ where: { id: productoId } });
+    if (!prod) throw new HttpError(404, "Código no encontrado");
+
+    const resultado = await prisma.$transaction((tx) =>
+      editarLoteInicialFifo(tx, {
+        productoId,
+        fobUnidad: body.fobUnidad,
+        costoUnidad: body.costoUnidad,
+        motivo: body.motivo,
+      })
+    );
+
+    res.json(resultado);
   })
 );
 

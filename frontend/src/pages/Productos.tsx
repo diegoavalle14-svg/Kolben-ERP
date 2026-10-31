@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Pencil, Plus, Upload } from 'lucide-react';
 import { api } from '../lib/api';
+import FichaCodigo from '../components/FichaCodigo';
 
 /* ───────── Tipos ───────── */
 interface Categoria { id: number; nombre: string; orden: number; empaque: number; multiplicador: number }
@@ -13,7 +14,7 @@ interface Fila {
 interface Totales { codigos: number; valorCosto: number; valorVenta: number }
 interface Grupo { categoria: { id: number; nombre: string; orden: number }; productos: Fila[]; totales: Totales }
 interface Datos { grupos: Grupo[]; total: Totales; enArranque?: boolean }
-type Vista = 'tabla' | 'listas' | 'ordenar' | 'form';
+type Vista = 'tabla' | 'listas' | 'ordenar' | 'ficha' | 'form';
 
 const LIMITE_GRUPO = 8;
 const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -135,7 +136,7 @@ export default function Productos() {
             datos={datos}
             expandidos={expandidos}
             setExpandidos={setExpandidos}
-            onEditar={(id) => { setEditando(id); setVista('form'); }}
+            onEditar={(id) => { setEditando(id); setVista('ficha'); }}
             onMover={async (id, dir) => {
               try {
                 await api(`/productos/${id}/mover`, { method: 'POST', body: JSON.stringify({ dir }) });
@@ -146,6 +147,16 @@ export default function Productos() {
             }}
           />
         </>
+      )}
+
+      {vista === 'ficha' && editando !== null && (
+        <FichaCodigo
+          id={editando}
+          onVolver={() => { setEditando(null); setVista('tabla'); }}
+          onEditarDatos={(id) => { setEditando(id); setVista('form'); }}
+          onCambioStock={cargar}
+          flash={flash}
+        />
       )}
 
       {vista === 'listas' && (
@@ -168,8 +179,17 @@ export default function Productos() {
           categorias={categorias}
           marcas={marcas}
           enArranque={datos?.enArranque ?? true}
-          onCancelar={() => setVista('tabla')}
-          onGuardado={async (t) => { flash('ok', t); await cargar(); setVista('tabla'); }}
+          onCancelar={() => setVista(editando !== null ? 'ficha' : 'tabla')}
+          onGuardado={async (t) => {
+            flash('ok', t);
+            await cargar();
+            if (t === 'Código eliminado' || editando === null) {
+              setEditando(null);
+              setVista('tabla');
+            } else {
+              setVista('ficha');
+            }
+          }}
           flash={flash}
         />
       )}

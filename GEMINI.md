@@ -109,6 +109,7 @@ Este archivo se carga automáticamente en cada sesión. **Siempre** debes respet
 - ✅ **Etapa 0 (Cimientos)**: Completada.
 - ✅ **Etapa 1 (Entrada + Menú y Configuración - Pantalla 12)**: Completada y alineada con v1.1.
 - ✅ **Etapa 2 (Productos y Listas - Pantalla 8)**: Completada y alineada con v1.1 (`empaque` 10/20/50 en Categorías, bloqueo de inactivación con stock/apartado/pedido activo, registro automático en `MesSinStock` al crear con stock 0, flechas `↑ ↓` por fila y control de estado `enArranque`).
-- 🔜 **Etapa 3 (Ficha de código - Pantalla 9)**: Siguiente etapa a implementar.
-- ⏳ **Etapas 4 a 14**: Pendientes según [`docs/PLAN_ETAPAS.md`](./docs/PLAN_ETAPAS.md).
+- ✅ **Etapa 3 (Ficha de código - Pantalla 9)**: Completada (`FichaCodigo.tsx`, servicio reutilizable `fifo.service.ts`, lotes FIFO con agrupación de agotados de años anteriores, ajuste de stock en 2 pasos con motivo, edición del lote `INICIAL` con recálculo de piezas vendidas y registro automático en `MesSinStock` al llegar a 0).
+- 🔜 **Etapa 4 (Clientes - Pantalla 6)**: Siguiente etapa a implementar.
+- ⏳ **Etapas 5 a 14**: Pendientes según [`docs/PLAN_ETAPAS.md`](./docs/PLAN_ETAPAS.md).
 
